@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_anon_key: str
     supabase_service_role_key: str
-    supabase_jwt_secret: str  # solo se mantiene por compatibilidad — ya no se usa para firmar
+    supabase_jwt_secret: str | None = None  # opcional — ya no lo usamos para firmar
 
     # NUESTRO secret para firmar los JWT de la app. Nunca reutilizar el de Supabase.
     # Generarlo con: openssl rand -base64 64
