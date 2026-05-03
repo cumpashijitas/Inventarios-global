@@ -1,16 +1,17 @@
-"""Verificación de JWT (Supabase) y extracción de claims.
+"""Emisión y verificación de JWT propios de la app.
 
-Supabase emite JWT firmados con HS256 usando el JWT secret del proyecto.
-El backend verifica firma + audience + expiración, y extrae claims customizados
-(`empresa_id`, `rol`) que el Custom Access Token Hook agrega al token.
+Después del cambio a JWT propio (firmado con APP_JWT_SECRET):
+    - El password lo valida Supabase Auth (Supabase JWT se descarta tras login).
+    - Para todas las demás requests autenticadas, el frontend manda NUESTRO JWT.
+    - Nuestros claims son simples y predecibles: sub, empresa_id, rol, email, exp.
 
-Si todavía no configuraste la hook, puedes inyectar `empresa_id` desde el
-backend al hacer login (workaround temporal). Pero la solución correcta es la
-hook — la dejamos documentada en docs/auth-hook.md (TODO).
+Esto nos desacopla del esquema de firma de Supabase (HS/ES/RS) y elimina la
+necesidad de la Custom Access Token Hook.
 """
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -22,26 +23,50 @@ from app.core.exceptions import UnauthorizedError
 
 @dataclass(frozen=True, slots=True)
 class JWTClaims:
-    """Claims que esperamos en el JWT de Supabase + customizados del SaaS."""
-
-    sub: str                  # user_id (auth.users.id)
-    empresa_id: str | None    # uuid de la empresa activa (claim customizado)
-    rol: str | None           # rol del usuario en esa empresa
+    sub: str                  # user_id (auth.users.id de Supabase)
+    empresa_id: str | None    # uuid de la empresa activa
+    rol: str | None
     email: str | None
-    raw: dict[str, Any]       # payload crudo por si algún módulo necesita más
+    raw: dict[str, Any]
+
+
+def issue_app_token(
+    *,
+    user_id: str,
+    empresa_id: str | None,
+    rol: str | None,
+    email: str | None,
+    expires_minutes: int | None = None,
+) -> tuple[str, int]:
+    """Emite un JWT firmado con APP_JWT_SECRET.
+
+    Devuelve (token, expires_in_seconds). expires_in es lo que le decimos al
+    frontend para que sepa cuándo expira.
+    """
+    expires_minutes = expires_minutes or settings.jwt_expires_minutes
+    now = int(time.time())
+    exp = now + expires_minutes * 60
+
+    payload: dict[str, Any] = {
+        "iss": settings.app_name,
+        "aud": settings.jwt_audience,
+        "sub": user_id,
+        "empresa_id": empresa_id,
+        "rol": rol,
+        "email": email,
+        "iat": now,
+        "exp": exp,
+    }
+    token = jwt.encode(payload, settings.app_jwt_secret, algorithm=settings.jwt_algorithm)
+    return token, expires_minutes * 60
 
 
 def decode_jwt(token: str) -> JWTClaims:
-    """Verifica firma + audience + exp y devuelve los claims tipados.
-
-    Lanza UnauthorizedError si el token es inválido por cualquier motivo.
-    Usar este wrapper en vez de jwt.decode() directo para tener errores
-    consistentes en toda la app.
-    """
+    """Verifica firma + audience + exp y devuelve los claims tipados."""
     try:
         payload = jwt.decode(
             token,
-            settings.supabase_jwt_secret,
+            settings.app_jwt_secret,
             algorithms=[settings.jwt_algorithm],
             audience=settings.jwt_audience,
             options={"require": ["exp", "sub"]},

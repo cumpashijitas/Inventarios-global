@@ -10,7 +10,8 @@ from functools import lru_cache
 from typing import Literal
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+from typing import Annotated
 
 
 class Settings(BaseSettings):
@@ -27,7 +28,11 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     log_level: str = "INFO"
 
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    # NoDecode evita que pydantic-settings intente JSON-decode el env var.
+    # Así nuestro validator recibe el string CSV crudo y lo splittea.
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:5173"]
+    )
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -40,10 +45,15 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_anon_key: str
     supabase_service_role_key: str
-    supabase_jwt_secret: str
+    supabase_jwt_secret: str  # solo se mantiene por compatibilidad — ya no se usa para firmar
+
+    # NUESTRO secret para firmar los JWT de la app. Nunca reutilizar el de Supabase.
+    # Generarlo con: openssl rand -base64 64
+    app_jwt_secret: str
 
     jwt_algorithm: str = "HS256"
-    jwt_audience: str = "authenticated"
+    jwt_audience: str = "inventario-saas"   # antes era "authenticated"
+    jwt_expires_minutes: int = 480          # 8 horas
 
     # --- Database ---
     database_url: str
@@ -55,7 +65,7 @@ class Settings(BaseSettings):
     sentry_traces_sample_rate: float = 0.1
 
     # --- Seguridad ---
-    admin_ip_allowlist: list[str] = Field(default_factory=list)
+    admin_ip_allowlist: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
     @field_validator("admin_ip_allowlist", mode="before")
     @classmethod

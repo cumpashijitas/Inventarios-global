@@ -1,25 +1,24 @@
 """Use cases de auth.
 
-Mientras no esté la Custom Access Token Hook configurada en Supabase, el JWT
-emitido NO tiene `empresa_id`. Workaround: el backend hace login, busca las
-empresas del usuario, y si tiene UNA SOLA, regenera/extiende el JWT con
-`empresa_id`. Si tiene varias, devuelve la lista para que el usuario elija.
+Modelo simplificado:
+    1. Login: validar password contra Supabase Auth → obtener user_id.
+    2. Buscar empresas del usuario en NUESTRA DB.
+    3. Si tiene 1 empresa: emitir nuestro propio JWT con empresa_id ya inyectado.
+       Si tiene varias: devolver lista, el frontend llama a /auth/select-empresa.
+    4. Refresh de la sesión: re-emitir JWT (validamos que el usuario sigue activo).
+       Por simplicidad NO usamos los refresh tokens de Supabase — el frontend
+       puede re-loguear si nuestro JWT expira.
 
-NOTA: regenerar el JWT requiere que firmemos con el JWT secret de Supabase.
-PyJWT puede hacerlo. Esto es solo aceptable mientras configuras la hook.
-La solución correcta es la hook — entonces este código se simplifica.
+Esto nos hace independientes del esquema de firma de Supabase (HS256/ES256/RS256).
 """
 
 from __future__ import annotations
 
-import time
 from typing import Any
 
-import jwt
-
-from app.core.config import settings
 from app.core.database import service_pool
 from app.core.exceptions import NotFoundError, UnauthorizedError
+from app.core.security import decode_jwt, issue_app_token
 from app.modules.auth.infrastructure.supabase_auth import SupabaseAuthAdapter
 
 
@@ -28,13 +27,14 @@ class AuthUseCases:
         self.supabase = supabase or SupabaseAuthAdapter()
 
     async def login(self, email: str, password: str) -> dict[str, Any]:
-        # 1. Auth contra Supabase
-        token_response = await self.supabase.sign_in_password(email, password)
-        user_id = token_response["user"]["id"]
+        # 1. Validar password contra Supabase Auth — solo lo usamos para esto
+        supabase_token = await self.supabase.sign_in_password(email, password)
+        user_id = supabase_token["user"]["id"]
+        user_email = supabase_token["user"].get("email")
 
-        # 2. Buscar empresas del usuario
+        # 2. Empresas del usuario
         async with service_pool() as conn:
-            empresas = await conn.fetch(
+            rows = await conn.fetch(
                 """
                 select e.id, e.razon_social, r.codigo as rol
                   from public.usuarios_empresa ue
@@ -48,35 +48,35 @@ class AuthUseCases:
             )
 
         empresas_list = [
-            {"id": str(e["id"]), "razon_social": e["razon_social"], "rol": e["rol"]}
-            for e in empresas
+            {"id": str(r["id"]), "razon_social": r["razon_social"], "rol": r["rol"]}
+            for r in rows
         ]
 
-        # 3. Si tiene una sola → emitir tokens con empresa_id ya inyectado
+        # 3. Si tiene una sola → emitir nuestro JWT directo
         tokens = None
         if len(empresas_list) == 1:
-            tokens = self._reissue_with_empresa(
-                token_response, empresas_list[0]["id"], empresas_list[0]["rol"]
+            tokens = self._issue_session(
+                user_id=user_id,
+                email=user_email,
+                empresa_id=empresas_list[0]["id"],
+                rol=empresas_list[0]["rol"],
             )
 
         return {
             "user_id": user_id,
-            "email": token_response["user"]["email"],
+            "email": user_email,
             "empresas": empresas_list,
             "tokens": tokens,
         }
 
     async def select_empresa(self, current_token: str, empresa_id: str) -> dict[str, Any]:
-        """Tras un login con múltiples empresas, el usuario elige una."""
-        # Decodificar (sin verificar de nuevo: ya pasó por get_jwt_claims arriba)
-        # En este use case asumimos que el caller ya validó.
-        payload = jwt.decode(
-            current_token,
-            settings.supabase_jwt_secret,
-            algorithms=[settings.jwt_algorithm],
-            audience=settings.jwt_audience,
-        )
-        user_id = payload["sub"]
+        """Tras un login con múltiples empresas, el usuario elige una.
+
+        El current_token es nuestro propio JWT (sin empresa_id aún) — lo
+        decodificamos para obtener el user_id, validamos que el user pertenece
+        a la empresa elegida, y emitimos un JWT nuevo con empresa_id puesto.
+        """
+        claims = decode_jwt(current_token)
 
         async with service_pool() as conn:
             row = await conn.fetchrow(
@@ -86,69 +86,80 @@ class AuthUseCases:
                   join public.roles_empresa r on r.id = ue.rol_id
                  where ue.user_id = $1 and ue.empresa_id = $2 and ue.activo = true
                 """,
-                user_id,
+                claims.sub,
                 empresa_id,
             )
         if row is None:
             raise NotFoundError("usuario no pertenece a esa empresa")
 
-        return self._reissue_with_empresa(
-            {"access_token": current_token, "expires_in": 3600},
-            empresa_id,
-            row["rol"],
+        return self._issue_session(
+            user_id=claims.sub,
+            email=claims.email,
+            empresa_id=empresa_id,
+            rol=row["rol"],
         )
 
     async def refresh(self, refresh_token: str) -> dict[str, Any]:
-        new_tokens = await self.supabase.refresh(refresh_token)
-        # El refresh emite un JWT vacío (sin empresa_id custom) — re-inyectar.
-        # Asumimos que el frontend mantiene el empresa_id activo y lo reenvía,
-        # o usar la hook de Supabase para que el refresh ya lo incluya.
-        return {
-            "access_token": new_tokens["access_token"],
-            "refresh_token": new_tokens["refresh_token"],
-            "token_type": "bearer",
-            "expires_in": new_tokens.get("expires_in", 3600),
-        }
+        """Refresca la sesión validando que el usuario sigue activo en la empresa.
 
-    async def logout(self, access_token: str) -> None:
-        await self.supabase.sign_out(access_token)
+        En este modelo simplificado, refresh_token = el access_token actual
+        (aún no expirado). Si quieres refresh tokens propios, agrega una tabla
+        refresh_tokens y rotación.
+        """
+        try:
+            claims = decode_jwt(refresh_token)
+        except UnauthorizedError as e:
+            raise UnauthorizedError("refresh token inválido o expirado") from e
+
+        if not claims.empresa_id:
+            raise UnauthorizedError("token sin empresa_id; vuelve a hacer login")
+
+        async with service_pool() as conn:
+            row = await conn.fetchrow(
+                """
+                select r.codigo as rol
+                  from public.usuarios_empresa ue
+                  join public.roles_empresa r on r.id = ue.rol_id
+                 where ue.user_id = $1 and ue.empresa_id = $2
+                   and ue.activo = true and ue.deleted_at is null
+                """,
+                claims.sub,
+                claims.empresa_id,
+            )
+        if row is None:
+            raise UnauthorizedError("el usuario ya no pertenece a esa empresa")
+
+        return self._issue_session(
+            user_id=claims.sub,
+            email=claims.email,
+            empresa_id=claims.empresa_id,
+            rol=row["rol"],
+        )
+
+    async def logout(self, _access_token: str) -> None:
+        # Como el JWT es self-contained y stateless, "logout" es responsabilidad
+        # del frontend (descartar el token). Si querés revocación real, agrega
+        # una tabla `tokens_revocados` y chequea en decode_jwt.
+        return None
 
     # -------------------------------------------------------------------
-    def _reissue_with_empresa(
-        self, supabase_token: dict[str, Any], empresa_id: str, rol: str
+    def _issue_session(
+        self, *, user_id: str, email: str | None, empresa_id: str, rol: str
     ) -> dict[str, Any]:
-        """Re-firma el access_token de Supabase agregando empresa_id y rol.
-
-        Esto es un WORKAROUND mientras no haya Custom Access Token Hook.
-        Cuando la hook esté lista, eliminar este método y devolver tokens directos.
-        """
-        original = jwt.decode(
-            supabase_token["access_token"],
-            settings.supabase_jwt_secret,
-            algorithms=[settings.jwt_algorithm],
-            audience=settings.jwt_audience,
-            options={"verify_exp": False},
+        token, expires_in = issue_app_token(
+            user_id=user_id,
+            empresa_id=empresa_id,
+            rol=rol,
+            email=email,
         )
-
-        new_payload = {
-            **original,
-            "empresa_id": empresa_id,
-            "rol": rol,
-            "iat": int(time.time()),
-            "exp": int(time.time()) + supabase_token.get("expires_in", 3600),
-        }
-
-        new_access = jwt.encode(
-            new_payload,
-            settings.supabase_jwt_secret,
-            algorithm=settings.jwt_algorithm,
-        )
-
         return {
-            "access_token": new_access,
-            "refresh_token": supabase_token.get("refresh_token", ""),
+            "access_token": token,
+            # En este modelo simple, refresh_token = access_token actual.
+            # El cliente puede llamar a /auth/refresh con el access_token vivo
+            # para extender la sesión.
+            "refresh_token": token,
             "token_type": "bearer",
-            "expires_in": supabase_token.get("expires_in", 3600),
+            "expires_in": expires_in,
             "empresa_id": empresa_id,
             "rol": rol,
         }
@@ -164,5 +175,4 @@ def get_auth_use_cases() -> AuthUseCases:
     return _use_cases
 
 
-# Re-export para reducir imports
 __all__ = ["AuthUseCases", "get_auth_use_cases", "UnauthorizedError"]

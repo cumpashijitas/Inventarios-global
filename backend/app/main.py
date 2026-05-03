@@ -112,6 +112,12 @@ app.add_middleware(
 
 # -----------------------------------------------------------------------------
 # Middleware: request_id + structured logging por request
+#
+# OJO: atrapamos cualquier excepción aquí y la convertimos a JSONResponse 500
+# para que el CORSMiddleware (que está afuera) pueda agregar sus headers a la
+# respuesta. Si dejas que la excepción burbujee, Starlette responde 500 desde
+# fuera del stack de middlewares y los headers CORS se pierden — el browser
+# bloquea con "No 'Access-Control-Allow-Origin' header is present".
 # -----------------------------------------------------------------------------
 @app.middleware("http")
 async def request_context(request: Request, call_next):
@@ -122,7 +128,20 @@ async def request_context(request: Request, call_next):
         method=request.method,
         path=request.url.path,
     )
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception as exc:  # noqa: BLE001
+        log.exception("unhandled_error", error=str(exc))
+        response = JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "internal_error",
+                    "message": "Error interno del servidor",
+                    "details": {"type": exc.__class__.__name__},
+                }
+            },
+        )
     response.headers["X-Request-ID"] = request_id
     return response
 
