@@ -1,11 +1,23 @@
-import PlaceholderPage from "@/shared/components/PlaceholderPage";
+import { Users } from "lucide-react";
 
-// TODO: conectar con tabla de clientes de la empresa (módulo ventas)
+import { ModuleComingSoon } from "@/shared/components/ModuleComingSoon";
+
+// TODO backend: módulo `clientes`. Tablas: clientes, contactos, direcciones.
 export default function ClientesPage() {
   return (
-    <PlaceholderPage
+    <ModuleComingSoon
+      icon={Users}
       title="Clientes"
-      description="Gestión del catálogo de clientes y su historial de compras."
+      description="Catálogo de clientes con historial, segmentación y datos de contacto."
+      plan="profesional"
+      features={[
+        "Ficha cliente con datos fiscales (NIT/CI), dirección y contactos múltiples",
+        "Historial de compras, pagos y cuentas por cobrar",
+        "Segmentación: tipo de cliente, zona, vendedor asignado",
+        "Importación masiva desde Excel/CSV",
+        "Búsqueda instantánea por nombre, NIT o teléfono",
+        "Notas internas y archivos adjuntos por cliente",
+      ]}
     />
   );
 }
