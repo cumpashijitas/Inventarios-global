@@ -20,8 +20,9 @@ Cascada de validación (de barata a cara):
 from __future__ import annotations
 
 from dataclasses import dataclass
+from uuid import UUID
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, HTTPException, Request
 
 from app.core.database import acquire_tenant_conn
 from app.core.exceptions import (
@@ -68,6 +69,62 @@ async def get_tenant_context(claims: JWTClaims = Depends(get_jwt_claims)) -> Ten
         rol=claims.rol,
         email=claims.email,
     )
+
+
+# -----------------------------------------------------------------------------
+# Verificación de IP permitida (whitelist por empresa)
+# -----------------------------------------------------------------------------
+def _get_client_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
+    return request.client.host if request.client else "unknown"
+
+
+async def check_ip_access(
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> None:
+    """Verifica que la IP del cliente esté en la whitelist de la empresa.
+
+    Reglas:
+    - Sin JWT válido → pasa (el route handler dará 401)
+    - Rol admin → siempre pasa
+    - Whitelist vacía → sin restricción (feature desactivada)
+    - IP en whitelist → pasa
+    - IP no en whitelist → 403
+    """
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return
+    try:
+        token = authorization.split(" ", 1)[1].strip()
+        claims = decode_jwt(token)
+    except Exception:
+        return  # Token inválido → el route handler dará 401
+
+    if not claims.empresa_id or claims.rol == "admin":
+        return
+
+    client_ip = _get_client_ip(request)
+
+    async with acquire_tenant_conn(claims.empresa_id, claims.sub) as conn:
+        rows = await conn.fetch(
+            "SELECT ip FROM public.ip_permitidas WHERE empresa_id = $1",
+            UUID(claims.empresa_id),
+        )
+
+    if not rows:
+        return  # Whitelist vacía → sin restricción
+
+    allowed = {row["ip"] for row in rows}
+    if client_ip not in allowed:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Acceso denegado: tu red ({client_ip}) no está autorizada. Contacta al administrador.",
+        )
 
 
 # -----------------------------------------------------------------------------

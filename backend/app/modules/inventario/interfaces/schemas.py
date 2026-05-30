@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # ---------- Almacenes ----------
@@ -42,13 +42,24 @@ class ProductoIn(BaseModel):
     codigo_barras: str | None = None
     categoria_id: UUID | None = None
     unidad_id: UUID
-    precio_compra: Decimal = Field(default=Decimal("0"), ge=0)
-    precio_venta: Decimal = Field(default=Decimal("0"), ge=0)
+    precio_compra: Decimal = Field(default=Decimal("0"), ge=0)   # precio real / costo
+    precio_venta: Decimal = Field(default=Decimal("0"), ge=0)    # precio público unitario
+    precio_mecanico: Decimal | None = Field(default=None, ge=0)
+    precio_mayor: Decimal | None = Field(default=None, ge=0)
     moneda: str = Field(default="BOB", min_length=3, max_length=3)
     stock_minimo: Decimal = Field(default=Decimal("0"), ge=0)
     stock_maximo: Decimal | None = Field(default=None, ge=0)
     controla_stock: bool = True
     imagen_url: str | None = None
+    marca: str | None = None
+    proveedor_id: UUID | None = None
+    aplicacion: str | None = None
+    medidas: str | None = None
+    peso: Decimal | None = Field(default=None, ge=0)
+    modelos: str | None = None
+    anio_desde: int | None = Field(default=None, ge=1900, le=2100)
+    anio_hasta: int | None = Field(default=None, ge=1900, le=2100)
+    ubicacion: str | None = None
 
 
 class ProductoUpdate(BaseModel):
@@ -57,10 +68,21 @@ class ProductoUpdate(BaseModel):
     categoria_id: UUID | None = None
     precio_compra: Decimal | None = Field(default=None, ge=0)
     precio_venta: Decimal | None = Field(default=None, ge=0)
+    precio_mecanico: Decimal | None = Field(default=None, ge=0)
+    precio_mayor: Decimal | None = Field(default=None, ge=0)
     stock_minimo: Decimal | None = Field(default=None, ge=0)
     stock_maximo: Decimal | None = Field(default=None, ge=0)
     activo: bool | None = None
     imagen_url: str | None = None
+    marca: str | None = None
+    proveedor_id: UUID | None = None
+    aplicacion: str | None = None
+    medidas: str | None = None
+    peso: Decimal | None = Field(default=None, ge=0)
+    modelos: str | None = None
+    anio_desde: int | None = None
+    anio_hasta: int | None = None
+    ubicacion: str | None = None
 
 
 class ProductoOut(BaseModel):
@@ -71,15 +93,143 @@ class ProductoOut(BaseModel):
     descripcion: str | None = None
     categoria_id: UUID | None = None
     unidad_id: UUID
-    precio_compra: Decimal
-    precio_venta: Decimal
+    precio_compra: Decimal                      # = precioReal en frontend
+    precio_venta: Decimal                       # = precioUnitario en frontend
+    precio_mecanico: Decimal | None = None
+    precio_mayor: Decimal | None = None
     stock_minimo: Decimal
     stock_maximo: Decimal | None = None
     controla_stock: bool
     activo: bool
     imagen_url: str | None = None
+    marca: str | None = None
+    proveedor_id: UUID | None = None
+    aplicacion: str | None = None
+    medidas: str | None = None
+    peso: Decimal | None = None
+    modelos: str | None = None
+    anio_desde: int | None = None
+    anio_hasta: int | None = None
+    ubicacion: str | None = None
+    stock_total: Decimal | None = None   # calculado por JOIN con stock_actual
     created_at: datetime
     updated_at: datetime
+
+
+# ---------- Proveedores ----------
+class ProveedorIn(BaseModel):
+    codigo: str | None = None
+    razon_social: str = Field(min_length=1, max_length=200)
+    nombre_contacto: str | None = None
+    email: str | None = None
+    telefono: str | None = None
+    celular: str | None = None
+    direccion: str | None = None
+    ciudad: str | None = None
+    pais: str = Field(default="BO", min_length=2, max_length=2)
+    nit: str | None = None
+    categoria: str = "general"
+    banco: str | None = None
+    cuenta_bancaria: str | None = None
+    notas: str | None = None
+
+
+class ProveedorUpdate(BaseModel):
+    razon_social: str | None = Field(default=None, min_length=1)
+    nombre_contacto: str | None = None
+    email: str | None = None
+    telefono: str | None = None
+    celular: str | None = None
+    direccion: str | None = None
+    ciudad: str | None = None
+    pais: str | None = Field(default=None, min_length=2, max_length=2)   # código ISO-3166 alpha-2
+    nit: str | None = None
+    categoria: str | None = None
+    banco: str | None = None
+    cuenta_bancaria: str | None = None
+    notas: str | None = None
+    activo: bool | None = None
+
+    @field_validator("pais", mode="before")
+    @classmethod
+    def _pais_upper(cls, v: str | None) -> str | None:
+        """Acepta 'bo' o 'BO' y normaliza a mayúsculas."""
+        return v.strip().upper() if isinstance(v, str) else v
+
+
+class ProveedorOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    codigo: str | None = None
+    razon_social: str
+    nombre_contacto: str | None = None
+    email: str | None = None
+    telefono: str | None = None
+    celular: str | None = None
+    direccion: str | None = None
+    ciudad: str | None = None
+    pais: str
+    nit: str | None = None
+    categoria: str
+    banco: str | None = None
+    cuenta_bancaria: str | None = None
+    notas: str | None = None
+    activo: bool
+    created_at: datetime
+
+
+# ---------- Clientes ----------
+class ClienteIn(BaseModel):
+    codigo: str | None = None
+    nombre: str = Field(min_length=1, max_length=200)
+    tipo: Literal["mecanico", "mayorista", "particular"] = "particular"
+    email: str | None = None
+    telefono: str | None = None
+    celular: str | None = None
+    direccion: str | None = None
+    ciudad: str | None = None
+    pais: str = Field(default="BO", min_length=2, max_length=2)
+    nit: str | None = None
+    limite_credito: Decimal = Field(default=Decimal("0"), ge=0)
+    dias_credito: int = Field(default=0, ge=0)
+    descuento_pct: Decimal = Field(default=Decimal("0"), ge=0, le=100)
+    notas: str | None = None
+
+
+class ClienteUpdate(BaseModel):
+    nombre: str | None = Field(default=None, min_length=1)
+    tipo: Literal["mecanico", "mayorista", "particular"] | None = None
+    email: str | None = None
+    telefono: str | None = None
+    celular: str | None = None
+    direccion: str | None = None
+    ciudad: str | None = None
+    nit: str | None = None
+    limite_credito: Decimal | None = Field(default=None, ge=0)
+    dias_credito: int | None = Field(default=None, ge=0)
+    descuento_pct: Decimal | None = Field(default=None, ge=0, le=100)
+    notas: str | None = None
+    activo: bool | None = None
+
+
+class ClienteOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    codigo: str | None = None
+    nombre: str
+    tipo: str
+    email: str | None = None
+    telefono: str | None = None
+    celular: str | None = None
+    direccion: str | None = None
+    ciudad: str | None = None
+    nit: str | None = None
+    limite_credito: Decimal
+    dias_credito: int
+    descuento_pct: Decimal
+    notas: str | None = None
+    activo: bool
+    created_at: datetime
 
 
 # ---------- Stock / Movimientos ----------
@@ -119,129 +269,38 @@ class MovimientoOut(BaseModel):
 class CategoriaIn(BaseModel):
     nombre: str = Field(min_length=1, max_length=120)
     parent_id: UUID | None = None
-    orden: int = 0
+    orden: int = Field(default=0, ge=0)
 
 
 class CategoriaUpdate(BaseModel):
     nombre: str | None = Field(default=None, min_length=1, max_length=120)
     parent_id: UUID | None = None
-    orden: int | None = None
+    orden: int | None = Field(default=None, ge=0)
     activo: bool | None = None
 
 
 class CategoriaOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
-    parent_id: UUID | None = None
     nombre: str
+    parent_id: UUID | None = None
     orden: int
     activo: bool
-    created_at: datetime
-    updated_at: datetime
 
 
-# ---------- Unidades ----------
-class UnidadIn(BaseModel):
-    codigo: str = Field(min_length=1, max_length=10)
-    nombre: str = Field(min_length=1, max_length=60)
-    decimales: int = Field(default=0, ge=0, le=6)
-
-
-class UnidadUpdate(BaseModel):
-    nombre: str | None = Field(default=None, min_length=1, max_length=60)
-    decimales: int | None = Field(default=None, ge=0, le=6)
-    activo: bool | None = None
-
-
-class UnidadOut(BaseModel):
+# ---------- Unidades de Medida ----------
+class UnidadMedidaOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     codigo: str
     nombre: str
     decimales: int
     activo: bool
-    created_at: datetime
-    updated_at: datetime
 
 
-# ---------- Stock consolidado ----------
-class StockConsolidadoItem(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    producto_id: UUID
-    sku: str
-    producto_nombre: str
-    stock_minimo: Decimal
-    stock_maximo: Decimal | None = None
-    almacen_id: UUID
-    almacen_codigo: str
-    almacen_nombre: str
-    cantidad: Decimal
-    costo_promedio: Decimal
-    valor: Decimal
-    bajo_minimo: bool
-    updated_at: datetime
-
-
-class StockConsolidadoPage(BaseModel):
-    items: list[StockConsolidadoItem]
-    total: int
-    page: int
-    page_size: int
-    total_pages: int
-    valor_total: Decimal
-    bajo_minimo_count: int
-
-
-# ---------- Reportes ----------
-class ReporteInventarioKPIs(BaseModel):
-    productos_con_stock: int
-    combinaciones: int
-    unidades_totales: Decimal
-    valor_total: Decimal
-    bajo_minimo_count: int
-
-
-class ReporteInventarioOut(BaseModel):
-    kpis: ReporteInventarioKPIs
-    top_valor: list[dict]
-    por_categoria: list[dict]
-
-
-class ReporteMovimientosResumen(BaseModel):
-    entradas: int
-    salidas: int
-    ajustes: int
-    transferencias: int
-    unidades_entrada: Decimal
-    unidades_salida: Decimal
-
-
-class ReporteMovimientosOut(BaseModel):
-    items: list[dict]
-    total: int
-    page: int
-    page_size: int
-    total_pages: int
-    resumen: ReporteMovimientosResumen
-    rango: dict
-
-
-class ReporteBajoStockItem(BaseModel):
-    producto_id: UUID
-    sku: str
-    nombre: str
-    stock_minimo: Decimal
-    stock_maximo: Decimal | None = None
-    almacen_id: UUID
-    almacen_codigo: str
-    almacen_nombre: str
-    stock_actual: Decimal
-    sugerencia_reorden: Decimal
-
-
-class ReporteBajoStockOut(BaseModel):
-    items: list[ReporteBajoStockItem]
-    total: int
+# ---------- Imagen producto ----------
+class ImagenProductoOut(BaseModel):
+    imagen_url: str
 
 
 # ---------- Paginación ----------

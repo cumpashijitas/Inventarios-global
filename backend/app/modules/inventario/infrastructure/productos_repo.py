@@ -31,35 +31,44 @@ class ProductosRepository:
         only_active: bool = False,
     ) -> tuple[list[dict[str, Any]], int]:
         offset = (page - 1) * page_size
-        where_clauses = ["empresa_id = $1", "deleted_at is null"]
+        where_clauses = ["p.empresa_id = $1", "p.deleted_at is null"]
         params: list[Any] = [empresa_id]
 
         if only_active:
-            where_clauses.append("activo = true")
+            where_clauses.append("p.activo = true")
 
         if search and search.strip():
             params.append(f"%{search.strip().lower()}%")
             where_clauses.append(
-                f"(lower(nombre) like ${len(params)} or lower(sku) like ${len(params)})"
+                f"(lower(p.nombre) like ${len(params)} or lower(p.sku) like ${len(params)})"
             )
 
         where = " and ".join(where_clauses)
 
         # Total
         total = await self.conn.fetchval(
-            f"select count(*) from public.productos where {where}", *params
+            f"select count(*) from public.productos p where {where}", *params
         )
 
-        # Página
+        # Página — incluye stock_total sumado de todos los almacenes
         params.extend([page_size, offset])
         rows = await self.conn.fetch(
             f"""
-            select id, sku, nombre, descripcion, categoria_id, unidad_id,
-                   precio_compra, precio_venta, stock_minimo, stock_maximo,
-                   controla_stock, activo, imagen_url, created_at, updated_at
-              from public.productos
+            select p.id, p.sku, p.nombre, p.descripcion, p.categoria_id, p.unidad_id,
+                   p.precio_compra, p.precio_venta, p.precio_mecanico, p.precio_mayor,
+                   p.stock_minimo, p.stock_maximo, p.controla_stock, p.activo,
+                   p.imagen_url, p.marca, p.proveedor_id, p.aplicacion, p.medidas,
+                   p.peso, p.modelos, p.anio_desde, p.anio_hasta, p.ubicacion,
+                   p.created_at, p.updated_at,
+                   coalesce(s.stock_total, 0) as stock_total
+              from public.productos p
+              left join (
+                select producto_id, sum(cantidad) as stock_total
+                  from public.stock_actual
+                 group by producto_id
+              ) s on s.producto_id = p.id
              where {where}
-             order by nombre
+             order by p.nombre
              limit ${len(params) - 1} offset ${len(params)}
             """,
             *params,
@@ -70,8 +79,11 @@ class ProductosRepository:
         row = await self.conn.fetchrow(
             """
             select id, empresa_id, sku, nombre, descripcion, categoria_id, unidad_id,
-                   precio_compra, precio_venta, stock_minimo, stock_maximo,
-                   controla_stock, activo, imagen_url, metadatos, created_at, updated_at
+                   precio_compra, precio_venta, precio_mecanico, precio_mayor,
+                   stock_minimo, stock_maximo, controla_stock, activo,
+                   imagen_url, metadatos, marca, proveedor_id, aplicacion, medidas,
+                   peso, modelos, anio_desde, anio_hasta, ubicacion,
+                   created_at, updated_at
               from public.productos
              where id = $1 and deleted_at is null
             """,
@@ -92,15 +104,22 @@ class ProductosRepository:
                 """
                 insert into public.productos
                     (empresa_id, sku, nombre, descripcion, codigo_barras, categoria_id,
-                     unidad_id, precio_compra, precio_venta, stock_minimo, stock_maximo,
-                     controla_stock, imagen_url, created_by, updated_by)
+                     unidad_id, precio_compra, precio_venta, precio_mecanico, precio_mayor,
+                     stock_minimo, stock_maximo, controla_stock, imagen_url,
+                     marca, proveedor_id, aplicacion, medidas, peso, modelos,
+                     anio_desde, anio_hasta, ubicacion, created_by, updated_by)
                 values
-                    ($1, $2, $3, $4, $5, $6,
-                     $7, $8, $9, $10, $11,
-                     $12, $13, $14, $14)
+                    ($1,$2,$3,$4,$5,$6,
+                     $7,$8,$9,$10,$11,
+                     $12,$13,$14,$15,
+                     $16,$17,$18,$19,$20,$21,
+                     $22,$23,$24,$25,$25)
                 returning id, sku, nombre, descripcion, categoria_id, unidad_id,
-                          precio_compra, precio_venta, stock_minimo, stock_maximo,
-                          controla_stock, activo, imagen_url, created_at, updated_at
+                          precio_compra, precio_venta, precio_mecanico, precio_mayor,
+                          stock_minimo, stock_maximo, controla_stock, activo,
+                          imagen_url, marca, proveedor_id, aplicacion, medidas,
+                          peso, modelos, anio_desde, anio_hasta, ubicacion,
+                          created_at, updated_at
                 """,
                 empresa_id,
                 data["sku"],
@@ -111,10 +130,21 @@ class ProductosRepository:
                 data["unidad_id"],
                 data["precio_compra"],
                 data["precio_venta"],
+                data.get("precio_mecanico"),
+                data.get("precio_mayor"),
                 data["stock_minimo"],
                 data.get("stock_maximo"),
                 data["controla_stock"],
                 data.get("imagen_url"),
+                data.get("marca"),
+                data.get("proveedor_id"),
+                data.get("aplicacion"),
+                data.get("medidas"),
+                data.get("peso"),
+                data.get("modelos"),
+                data.get("anio_desde"),
+                data.get("anio_hasta"),
+                data.get("ubicacion"),
                 user_id,
             )
         except asyncpg.UniqueViolationError as e:
@@ -125,12 +155,23 @@ class ProductosRepository:
         sets: list[str] = []
         params: list[Any] = []
         i = 1
+        _nullable_cols = {
+            "descripcion", "stock_maximo", "imagen_url", "categoria_id",
+            "precio_mecanico", "precio_mayor", "marca", "proveedor_id",
+            "aplicacion", "medidas", "peso", "modelos", "anio_desde",
+            "anio_hasta", "ubicacion",
+        }
         for k, v in patch.items():
-            if v is None and k not in {"descripcion", "stock_maximo", "imagen_url", "categoria_id"}:
+            if v is None and k not in _nullable_cols:
                 continue
             sets.append(f"{k} = ${i}")
             params.append(v)
             i += 1
+        # always-nullable columns (patch can set them to null explicitly)
+        _nullable = {"descripcion", "stock_maximo", "imagen_url", "categoria_id",
+                     "precio_mecanico", "precio_mayor", "marca", "proveedor_id",
+                     "aplicacion", "medidas", "peso", "modelos", "anio_desde",
+                     "anio_hasta", "ubicacion"}
         if not sets:
             return await self.get(producto_id)
         params.append(user_id)
@@ -144,8 +185,11 @@ class ProductosRepository:
                set {', '.join(sets)}, updated_at = now()
              where id = ${i} and deleted_at is null
             returning id, sku, nombre, descripcion, categoria_id, unidad_id,
-                      precio_compra, precio_venta, stock_minimo, stock_maximo,
-                      controla_stock, activo, imagen_url, created_at, updated_at
+                      precio_compra, precio_venta, precio_mecanico, precio_mayor,
+                      stock_minimo, stock_maximo, controla_stock, activo,
+                      imagen_url, marca, proveedor_id, aplicacion, medidas,
+                      peso, modelos, anio_desde, anio_hasta, ubicacion,
+                      created_at, updated_at
             """,
             *params,
         )

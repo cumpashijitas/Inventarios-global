@@ -60,6 +60,14 @@ class Settings(BaseSettings):
     database_pool_min: int = 1
     database_pool_max: int = 10
 
+    # --- Email (Resend) ---
+    resend_api_key: str | None = None          # re_xxxxxxxxxxxx
+    email_from: str = "sistema@resend.dev"     # dominio verificado en Resend
+
+    # --- Cron externo (cron-job.org) ---
+    # Secret que cron-job.org envía en el header X-Cron-Secret para autenticarse
+    cron_secret: str | None = None
+
     # --- Sentry ---
     sentry_dsn: str | None = None
     sentry_traces_sample_rate: float = 0.1

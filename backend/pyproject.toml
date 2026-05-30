@@ -10,30 +10,30 @@ dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "gunicorn>=23.0.0",
-
     # Validación y settings
     "pydantic>=2.9.0",
     "pydantic-settings>=2.6.0",
     "email-validator>=2.2.0",
-
     # DB
     "asyncpg>=0.30.0",
     "sqlalchemy>=2.0.36",         # solo para Alembic; queries van con asyncpg directo
     "alembic>=1.14.0",
-
     # Auth (hablamos con Supabase Auth API directamente vía httpx,
     # NO usamos el SDK supabase-py porque arrastra pyiceberg/storage3 que
     # requieren compilador C++ en Windows y no aportan nada en backend).
     "PyJWT[crypto]>=2.10.0",
     "httpx>=0.28.0",
-
     # Observabilidad
     "structlog>=24.4.0",
     "sentry-sdk[fastapi]>=2.18.0",
-
     # Util
     "python-dateutil>=2.9.0",
     "orjson>=3.10.0",
+    # Importación masiva — parseo de PDF y Excel
+    "pdfplumber>=0.11.0",
+    "openpyxl>=3.1.0",
+    "python-multipart>=0.0.9",
+    "resend>=2.30.1",
 ]
 
 [project.optional-dependencies]

@@ -38,3 +38,11 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+sample_proveedores/
+
+# Archivos de prueba / carga masiva
+*.pdf
+*.xlsx
+*.xls
+*.csv

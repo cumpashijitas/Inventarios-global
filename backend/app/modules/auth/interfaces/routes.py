@@ -70,3 +70,34 @@ async def me(claims: JWTClaims = Depends(get_jwt_claims)) -> dict:
         "empresa_id": claims.empresa_id,
         "rol": claims.rol,
     }
+
+
+@router.get("/empresa")
+async def empresa_perfil(claims: JWTClaims = Depends(get_jwt_claims)) -> dict:
+    """Perfil público de la empresa activa: nombre, dirección, teléfono, etc.
+    Usado en recibos y cotizaciones.  Devuelve null en campos no configurados."""
+    if not claims.empresa_id:
+        return {}
+    from app.core.database import acquire_tenant_conn
+    from uuid import UUID
+    async with acquire_tenant_conn(claims.empresa_id, claims.sub) as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM public.empresas WHERE id = $1 AND deleted_at IS NULL",
+            UUID(claims.empresa_id),
+        )
+    if not row:
+        return {}
+    d = dict(row)
+    return {
+        "razon_social":    d.get("razon_social"),
+        "nombre_comercial":d.get("nombre_comercial"),
+        "nit":             d.get("nit"),
+        "pais":            d.get("pais"),
+        "moneda_principal":d.get("moneda_principal"),
+        "logo_url":        d.get("logo_url"),
+        # Opcionales — existen sólo si se corrió 10-empresa-config.sql
+        "direccion":       d.get("direccion"),
+        "ciudad":          d.get("ciudad"),
+        "telefono":        d.get("telefono"),
+        "email":           d.get("email"),
+    }

@@ -8,9 +8,29 @@ garantizar atomicidad: si la auditoría falla, la mutación se rollbackea.
 from __future__ import annotations
 
 import json
+from decimal import Decimal
+from datetime import date, datetime
 from typing import Any
+from uuid import UUID
 
 import asyncpg
+
+
+class _AuditEncoder(json.JSONEncoder):
+    """Encoder que maneja los tipos Python que vienen de Pydantic / asyncpg."""
+
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, Decimal):
+            return float(obj)
+        if isinstance(obj, UUID):
+            return str(obj)
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        return super().default(obj)
+
+
+def _dumps(obj: Any) -> str:
+    return json.dumps(obj, cls=_AuditEncoder)
 
 
 async def registrar_auditoria(
@@ -40,8 +60,8 @@ async def registrar_auditoria(
         entidad,
         entidad_id,
         accion,
-        json.dumps(payload_antes) if payload_antes else None,
-        json.dumps(payload_despues) if payload_despues else None,
+        _dumps(payload_antes) if payload_antes else None,
+        _dumps(payload_despues) if payload_despues else None,
         ip,
         user_agent,
     )
