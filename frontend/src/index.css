@@ -36,25 +36,38 @@
   }
 
   .dark {
-    --background: 222.2 47% 11.2%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 47% 11.2%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 47% 11.2%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 50%;
+    /* Fondo principal muy oscuro (slate-950) */
+    --background:   222 47%  6%;
+    --foreground:   213 31% 91%;
+
+    /* Cards / superficies (slate-900) */
+    --card:         215 28% 10%;
+    --card-foreground: 213 31% 91%;
+
+    /* Popovers / dropdowns (slate-800) */
+    --popover:      215 28% 13%;
+    --popover-foreground: 213 31% 91%;
+
+    /* Primary: mantener indigo */
+    --primary:      243 75% 59%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secundario / muted */
+    --secondary:    215 28% 17%;
+    --secondary-foreground: 213 31% 91%;
+    --muted:        215 28% 17%;
+    --muted-foreground: 215 16% 57%;
+    --accent:       215 28% 17%;
+    --accent-foreground: 213 31% 91%;
+
+    /* Destructivo */
+    --destructive:  0 63% 50%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+
+    /* Bordes e inputs */
+    --border: 215 25% 20%;
+    --input:  215 25% 20%;
+    --ring:   243 75% 59%;
   }
 }
 
@@ -77,4 +90,113 @@
   .skeleton {
     @apply animate-pulse rounded-md bg-muted;
   }
+}
+
+/* Quitar flechas/spinners de inputs numéricos en todos los navegadores */
+@layer base {
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+}
+
+/* =============================================================================
+   DARK MODE — overrides globales para clases Tailwind hardcoded
+   (el selector .dark tiene mayor especificidad que la clase sola)
+   ============================================================================= */
+@layer utilities {
+  /* ── Fondos ── */
+  .dark .bg-white          { background-color: hsl(215 28% 10%); }
+  .dark .bg-slate-50       { background-color: hsl(222 47%  6%); }
+  .dark .bg-slate-100      { background-color: hsl(215 28% 14%); }
+  .dark .bg-slate-200      { background-color: hsl(215 28% 18%); }
+
+  /* ── Bordes ── */
+  .dark .border-slate-100  { border-color: hsl(215 25% 16%); }
+  .dark .border-slate-200  { border-color: hsl(215 25% 20%); }
+  .dark .border-slate-300  { border-color: hsl(215 25% 25%); }
+
+  /* ── Texto ── */
+  .dark .text-slate-900    { color: hsl(213 31% 95%); }
+  .dark .text-slate-800    { color: hsl(213 31% 91%); }
+  .dark .text-slate-700    { color: hsl(213 31% 82%); }
+  .dark .text-slate-600    { color: hsl(215 16% 70%); }
+  .dark .text-slate-500    { color: hsl(215 16% 57%); }
+  .dark .text-slate-400    { color: hsl(215 16% 47%); }
+
+  /* ── Divisores ── */
+  .dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: hsl(215 25% 16%); }
+  .dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-color: hsl(215 25% 20%); }
+
+  /* ── Hover fondos ── */
+  .dark .hover\:bg-slate-50:hover  { background-color: hsl(215 28% 14%); }
+  .dark .hover\:bg-slate-100:hover { background-color: hsl(215 28% 17%); }
+
+  /* ── Chips / badges de color — fondo más oscuro ── */
+  .dark .bg-indigo-50      { background-color: hsl(243 75% 12%); }
+  .dark .bg-emerald-50     { background-color: hsl(152 70% 10%); }
+  .dark .bg-green-50       { background-color: hsl(138 70% 10%); }
+  .dark .bg-red-50         { background-color: hsl(0 72% 10%);   }
+  .dark .bg-orange-50      { background-color: hsl(25 90% 10%);  }
+  .dark .bg-yellow-50      { background-color: hsl(46 90% 10%);  }
+  .dark .bg-blue-50        { background-color: hsl(214 80% 12%); }
+  .dark .bg-purple-50      { background-color: hsl(270 70% 12%); }
+  .dark .bg-teal-50        { background-color: hsl(172 70% 10%); }
+  .dark .bg-sky-50         { background-color: hsl(199 80% 10%); }
+
+  .dark .bg-indigo-100     { background-color: hsl(243 75% 18%); }
+  .dark .bg-emerald-100    { background-color: hsl(152 70% 14%); }
+  .dark .bg-green-100      { background-color: hsl(138 70% 14%); }
+  .dark .bg-red-100        { background-color: hsl(0 72% 14%);   }
+  .dark .bg-orange-100     { background-color: hsl(25 90% 14%);  }
+  .dark .bg-yellow-100     { background-color: hsl(46 90% 14%);  }
+  .dark .bg-blue-100       { background-color: hsl(214 80% 16%); }
+  .dark .bg-purple-100     { background-color: hsl(270 70% 16%); }
+  .dark .bg-teal-100       { background-color: hsl(172 70% 14%); }
+  .dark .bg-sky-100        { background-color: hsl(199 80% 14%); }
+
+  /* ── Texto de badges ── */
+  .dark .text-indigo-700   { color: hsl(243 75% 75%); }
+  .dark .text-indigo-600   { color: hsl(243 75% 70%); }
+  .dark .text-emerald-700  { color: hsl(152 60% 60%); }
+  .dark .text-emerald-600  { color: hsl(152 60% 55%); }
+  .dark .text-green-700    { color: hsl(138 60% 55%); }
+  .dark .text-green-600    { color: hsl(138 60% 50%); }
+  .dark .text-red-700      { color: hsl(0 72% 65%);   }
+  .dark .text-red-600      { color: hsl(0 72% 60%);   }
+  .dark .text-orange-700   { color: hsl(25 90% 60%);  }
+  .dark .text-orange-600   { color: hsl(25 90% 55%);  }
+  .dark .text-orange-500   { color: hsl(25 90% 55%);  }
+  .dark .text-yellow-700   { color: hsl(46 90% 55%);  }
+  .dark .text-yellow-600   { color: hsl(46 90% 50%);  }
+  .dark .text-blue-600     { color: hsl(214 80% 65%); }
+  .dark .text-blue-500     { color: hsl(214 80% 60%); }
+  .dark .text-purple-600   { color: hsl(270 70% 68%); }
+  .dark .text-teal-600     { color: hsl(172 70% 50%); }
+  .dark .text-sky-600      { color: hsl(199 80% 60%); }
+  .dark .text-sky-500      { color: hsl(199 80% 55%); }
+
+  /* ── Fondos hover de badges ── */
+  .dark .hover\:bg-red-50:hover    { background-color: hsl(0 72% 12%); }
+  .dark .hover\:text-red-600:hover { color: hsl(0 72% 60%); }
+
+  /* ── Inputs ── */
+  .dark input, .dark textarea, .dark select {
+    background-color: hsl(215 28% 13%);
+    border-color: hsl(215 25% 22%);
+    color: hsl(213 31% 91%);
+  }
+  .dark input::placeholder, .dark textarea::placeholder {
+    color: hsl(215 16% 45%);
+  }
+
+  /* ── Scrollbar discreta en dark ── */
+  .dark ::-webkit-scrollbar-track { background: hsl(215 28% 10%); }
+  .dark ::-webkit-scrollbar-thumb { background: hsl(215 28% 25%); border-radius: 4px; }
+  .dark ::-webkit-scrollbar-thumb:hover { background: hsl(215 28% 32%); }
 }

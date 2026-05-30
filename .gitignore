@@ -1,0 +1,6 @@
+# Claude Code (local, no versionar)
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db

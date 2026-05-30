@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 
 import { ToastProvider } from "@/shared/components/ui/toast";
+import { ThemeProvider } from "@/shared/hooks/useTheme";
 
 export function Providers({ children }: { children: ReactNode }) {
   // Crear el QueryClient en useState para que sobreviva re-renders pero no
@@ -29,8 +30,10 @@ export function Providers({ children }: { children: ReactNode }) {
   );
 
   return (
-    <QueryClientProvider client={client}>
-      <ToastProvider>{children}</ToastProvider>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={client}>
+        <ToastProvider>{children}</ToastProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }

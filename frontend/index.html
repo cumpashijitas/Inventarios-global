@@ -7,7 +7,18 @@
     <meta name="theme-color" content="#0f172a" />
     <link rel="preconnect" href="https://rsms.me/" />
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
-    <title>Inventario SaaS</title>
+    <title>Kairos</title>
+    <!-- Anti-FOUC: aplica dark class antes de que React hidrate -->
+    <script>
+      (function(){
+        try {
+          var t = localStorage.getItem('theme');
+          if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+          }
+        } catch(e){}
+      })();
+    </script>
   </head>
   <body class="h-full bg-background text-foreground antialiased">
     <div id="root" class="h-full"></div>

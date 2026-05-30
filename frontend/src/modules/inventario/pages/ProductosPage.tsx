@@ -121,16 +121,16 @@ export default function ProductosPage() {
         />
       ) : (
         <>
-          <div className="rounded-lg border bg-card">
+          <div className="rounded-lg border bg-card overflow-auto" style={{ maxHeight: "calc(100vh - 220px)" }}>
             <Table>
-              <TableHeader>
+              <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
-                  <TableHead>SKU</TableHead>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead className="text-right">P. compra</TableHead>
-                  <TableHead className="text-right">P. venta</TableHead>
-                  <TableHead className="text-right">Stock min.</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
+                  <TableHead className="bg-card">SKU</TableHead>
+                  <TableHead className="bg-card">Nombre</TableHead>
+                  <TableHead className="text-right bg-card">P. compra</TableHead>
+                  <TableHead className="text-right bg-card">P. venta</TableHead>
+                  <TableHead className="text-right bg-card">Stock min.</TableHead>
+                  <TableHead className="text-right bg-card">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -144,7 +144,7 @@ export default function ProductosPage() {
                     <TableCell className="text-right">
                       {formatMoney(p.precio_venta)}
                     </TableCell>
-                    <TableCell className="text-right">{p.stock_minimo}</TableCell>
+                    <TableCell className="text-right">{Math.round(parseFloat(p.stock_minimo))}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button

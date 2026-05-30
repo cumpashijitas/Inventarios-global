@@ -19,6 +19,7 @@ import { Label } from "@/shared/components/ui/label";
 import { useToast } from "@/shared/components/ui/toast";
 import { extractApiError } from "@/shared/api/client";
 import { useAuthStore } from "@/shared/stores/auth.store";
+import { BRAND } from "@/shared/config/branding";
 
 const loginSchema = z.object({
   email: z.string().email("Email inválido"),
@@ -73,44 +74,63 @@ export default function LoginPage() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Iniciar sesión</CardTitle>
-        <CardDescription>Ingresa con tu email empresarial</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-          <div className="space-y-1.5">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              autoFocus
-              {...register("email")}
-            />
-            {errors.email && (
-              <p className="text-xs text-destructive">{errors.email.message}</p>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="password">Contraseña</Label>
-            <Input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              {...register("password")}
-            />
-            {errors.password && (
-              <p className="text-xs text-destructive">{errors.password.message}</p>
-            )}
-          </div>
-          <Button type="submit" className="w-full" disabled={submitting}>
-            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Entrar
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <div className="flex flex-col items-center gap-6">
+      {/* Logo */}
+      <div className="flex flex-col items-center gap-2">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600 text-lg font-bold text-white shadow-md">
+          {BRAND.initials}
+        </div>
+        <div className="text-center">
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+            {BRAND.name}
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400">by {BRAND.company}</p>
+        </div>
+      </div>
+
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle>Iniciar sesión</CardTitle>
+          <CardDescription>Ingresa con tu email empresarial</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+            <div className="space-y-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                autoFocus
+                {...register("email")}
+              />
+              {errors.email && (
+                <p className="text-xs text-destructive">{errors.email.message}</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="password">Contraseña</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                {...register("password")}
+              />
+              {errors.password && (
+                <p className="text-xs text-destructive">{errors.password.message}</p>
+              )}
+            </div>
+            <Button type="submit" className="w-full" disabled={submitting}>
+              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Entrar
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <p className="text-xs text-slate-400 dark:text-slate-600">
+        © {BRAND.year} {BRAND.company} · {BRAND.name} · {BRAND.version}
+      </p>
+    </div>
   );
 }

@@ -1,5 +1,6 @@
 import { api } from "@/shared/api/client";
 import type {
+  EmpresaPerfil,
   LoginResponse,
   MeResponse,
   TokenResponse,
@@ -27,6 +28,11 @@ export const authApi = {
 
   me: async (): Promise<MeResponse> => {
     const r = await api.get<MeResponse>("/auth/me");
+    return r.data;
+  },
+
+  empresaPerfil: async (): Promise<EmpresaPerfil> => {
+    const r = await api.get<EmpresaPerfil>("/auth/empresa");
     return r.data;
   },
 };
