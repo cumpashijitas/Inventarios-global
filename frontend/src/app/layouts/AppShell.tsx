@@ -16,6 +16,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 
+import { api } from "@/shared/api/client";
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/cn";
 import { NetworkBlockedPage } from "@/shared/components/NetworkBlockedPage";
@@ -62,24 +63,6 @@ export function AppShell() {
       });
   }, []);
 
-  if (!networkChecked) return (
-    <div className="flex h-screen items-center justify-center bg-slate-950">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
-    </div>
-  );
-
-  if (networkBlocked) return <NetworkBlockedPage />;
-
-  // Filtrar ítems del nav según el rol del usuario
-  const navItems = NAV_ITEMS.filter((item) =>
-    !item.permiso || puedeAcceder(rol, item.permiso as Parameters<typeof puedeAcceder>[1])
-  );
-
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
-  };
-
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -89,6 +72,23 @@ export function AppShell() {
     if (userMenuOpen) document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [userMenuOpen]);
+
+  if (!networkChecked) return (
+    <div className="flex h-screen items-center justify-center bg-slate-950">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+    </div>
+  );
+
+  if (networkBlocked) return <NetworkBlockedPage />;
+
+  const navItems = NAV_ITEMS.filter((item) =>
+    !item.permiso || puedeAcceder(rol, item.permiso as Parameters<typeof puedeAcceder>[1])
+  );
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
