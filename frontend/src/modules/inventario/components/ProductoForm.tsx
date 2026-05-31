@@ -118,7 +118,7 @@ export function ProductoForm({
           </div>
         ) : (
           <form onSubmit={submit} className="space-y-3" noValidate>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="sku">SKU</Label>
                 <Input id="sku" {...register("sku")} disabled={isEdit} />

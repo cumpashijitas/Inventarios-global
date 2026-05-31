@@ -126,7 +126,7 @@ export default function AlmacenesPage() {
             <DialogTitle>Nuevo almacén</DialogTitle>
           </DialogHeader>
           <form onSubmit={submit} className="space-y-3" noValidate>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="codigo">Código</Label>
                 <Input id="codigo" {...register("codigo")} placeholder="CENTRAL" />
@@ -154,7 +154,7 @@ export default function AlmacenesPage() {
                 <p className="text-xs text-destructive">{errors.nombre.message}</p>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="ciudad">Ciudad</Label>
                 <Input id="ciudad" {...register("ciudad")} />

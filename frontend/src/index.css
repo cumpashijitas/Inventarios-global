@@ -92,6 +92,25 @@
   }
 }
 
+/* ── Responsive mobile ── */
+@layer base {
+  /* Grids de 2 columnas dentro de modales/diálogos → 1 columna en mobile */
+  @media (max-width: 639px) {
+    [role="dialog"] .grid-cols-2,
+    [data-radix-popper-content-wrapper] .grid-cols-2 {
+      grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+    }
+
+    /* Filas de botones con gap → wrap */
+    .flex.gap-2, .flex.gap-3, .flex.gap-4 {
+      flex-wrap: wrap;
+    }
+
+    /* Textos muy largos que rompen layout */
+    .truncate { max-width: 120px; }
+  }
+}
+
 /* Quitar flechas/spinners de inputs numéricos en todos los navegadores */
 @layer base {
   input[type="number"]::-webkit-inner-spin-button,

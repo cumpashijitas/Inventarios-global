@@ -128,7 +128,7 @@ function TabGeneral() {
     <div className="max-w-2xl space-y-5">
       <h2 className="text-sm font-semibold text-slate-700">Información de la Empresa</h2>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="Nombre de la Empresa *" value={form.razon_social ?? ""} onChange={f("razon_social")} />
         <Field label="RUC / NIT" value={form.nit ?? ""} onChange={f("nit")} />
         <div className="col-span-2">
@@ -472,7 +472,7 @@ function TabSistema() {
 
       <div>
         <h2 className="text-sm font-semibold text-slate-700 mb-3">Información del Sistema</h2>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {INFO_SISTEMA.map((i) => (
             <div key={i.label} className="rounded-xl border border-slate-200 bg-white px-4 py-3">
               <p className="text-xs text-slate-400">{i.label}</p>
