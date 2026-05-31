@@ -45,11 +45,28 @@ const NAV_ITEMS: NavItem[] = [
 export function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const { email, rol, logout, networkBlocked } = useAuthStore();
+  const { email, rol, logout, networkBlocked, setNetworkBlocked } = useAuthStore();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [networkChecked, setNetworkChecked] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
+
+  useEffect(() => {
+    if (rol === "admin") { setNetworkChecked(true); return; }
+    api.get("/admin/mi-ip")
+      .then(() => setNetworkChecked(true))
+      .catch((err) => {
+        if (err.response?.status === 403) setNetworkBlocked(true);
+        setNetworkChecked(true);
+      });
+  }, []);
+
+  if (!networkChecked) return (
+    <div className="flex h-screen items-center justify-center bg-slate-950">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+    </div>
+  );
 
   if (networkBlocked) return <NetworkBlockedPage />;
 

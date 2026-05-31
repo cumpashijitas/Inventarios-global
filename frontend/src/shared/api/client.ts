@@ -62,16 +62,6 @@ api.interceptors.response.use(
       | (typeof error.config & { _retry?: boolean })
       | undefined;
 
-    if (error.response?.status === 403) {
-      const msg = (error.response.data as { detail?: string })?.detail ?? "";
-      if (
-        (msg.includes("Acceso denegado") || msg.includes("autorizada")) &&
-        !useAuthStore.getState().networkBlocked
-      ) {
-        useAuthStore.getState().setNetworkBlocked(true);
-      }
-    }
-
     if (
       error.response?.status === 401 &&
       original &&
