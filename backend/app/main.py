@@ -196,7 +196,7 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
 # -----------------------------------------------------------------------------
 # Endpoints raíz
 # -----------------------------------------------------------------------------
-@app.get("/health", tags=["meta"])
+@app.api_route("/health", methods=["GET", "HEAD"], tags=["meta"])
 async def health() -> dict[str, Any]:
     """Healthcheck: valida que la DB responde."""
     try:
