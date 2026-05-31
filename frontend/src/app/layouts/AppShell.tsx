@@ -18,6 +18,7 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/cn";
+import { NetworkBlockedPage } from "@/shared/components/NetworkBlockedPage";
 import { useAuthStore } from "@/shared/stores/auth.store";
 import { useTheme } from "@/shared/hooks/useTheme";
 import { puedeAcceder, ROL_LABEL, type Rol } from "@/shared/config/roles";
@@ -44,11 +45,13 @@ const NAV_ITEMS: NavItem[] = [
 export function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const { email, rol, logout } = useAuthStore();
+  const { email, rol, logout, networkBlocked } = useAuthStore();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
+
+  if (networkBlocked) return <NetworkBlockedPage />;
 
   // Filtrar ítems del nav según el rol del usuario
   const navItems = NAV_ITEMS.filter((item) =>

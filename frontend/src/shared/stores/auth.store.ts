@@ -17,10 +17,12 @@ interface AuthState {
   rol: string | null;
   email: string | null;
   empresasDisponibles: EmpresaResumen[];
+  networkBlocked: boolean;
 
   setTokens: (t: TokenResponse) => void;
   setEmail: (email: string) => void;
   setEmpresasDisponibles: (empresas: EmpresaResumen[]) => void;
+  setNetworkBlocked: (blocked: boolean) => void;
   logout: () => void;
 }
 
@@ -33,6 +35,7 @@ export const useAuthStore = create<AuthState>()(
       rol: null,
       email: null,
       empresasDisponibles: [],
+      networkBlocked: false,
 
       setTokens: (t) =>
         set({
@@ -43,6 +46,7 @@ export const useAuthStore = create<AuthState>()(
         }),
       setEmail: (email) => set({ email }),
       setEmpresasDisponibles: (empresas) => set({ empresasDisponibles: empresas }),
+      setNetworkBlocked: (blocked) => set({ networkBlocked: blocked }),
       logout: () =>
         set({
           accessToken: null,
