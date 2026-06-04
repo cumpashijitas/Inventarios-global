@@ -22,7 +22,7 @@ import { cn } from "@/shared/lib/cn";
 import { NetworkBlockedPage } from "@/shared/components/NetworkBlockedPage";
 import { useAuthStore } from "@/shared/stores/auth.store";
 import { useTheme } from "@/shared/hooks/useTheme";
-import { puedeAcceder, ROL_LABEL, type Rol } from "@/shared/config/roles";
+import { puedeAcceder, ROL_LABEL } from "@/shared/config/roles";
 import { BRAND } from "@/shared/config/branding";
 
 interface NavItem {
