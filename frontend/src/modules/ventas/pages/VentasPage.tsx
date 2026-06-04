@@ -1,7 +1,9 @@
 import {
-  Check, ChevronDown, Clock, Eye, FileText, MessageCircle,
+  ArrowLeftRight, Check, ChevronDown, Clock, Eye, FileText, MessageCircle,
   Minus, Plus, Printer, Search, ShoppingCart, TrendingUp, X, XCircle,
 } from "lucide-react";
+import { useMemo } from "react";
+import DevolucionesTab from "@/modules/ventas/pages/DevolucionesTab";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -18,7 +20,7 @@ import { fmtBs } from "@/shared/utils/format";
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos internos
 // ─────────────────────────────────────────────────────────────────────────────
-type Tab = "ventas" | "cotizaciones";
+type Tab = "ventas" | "cotizaciones" | "devoluciones";
 interface CartItem {
   id: string; sku: string; nombre: string;
   precio: number; cantidad: number; stock: number;
@@ -396,6 +398,10 @@ export default function VentasPage() {
   const [modalVerCot, setModalVerCot]     = useState<Cotizacion | null>(null);
   const [cotizacionOrigen, setCotizacionOrigen] = useState<Cotizacion | null>(null);
 
+  // Buscadores de tabla
+  const [busqVentas, setBusqVentas] = useState("");
+  const [busqDevs, setBusqDevs]     = useState("");
+
   // Formulario compartido venta/cotización
   const [busqueda, setBusqueda]             = useState("");
   const [clienteNombre, setClienteNombre]   = useState("");
@@ -449,6 +455,20 @@ export default function VentasPage() {
   const ventasHoy     = ventas.filter((v) => v.fecha === hoy).reduce((s, v) => s + parseFloat(v.total), 0);
   const cotPendientes = cotizaciones.filter((c) => c.estado === "pendiente").length;
   const ticketProm    = ventas.length ? totalVentas / ventas.length : 0;
+
+  // ── Ventas filtradas para tabla ───────────────────────────────────────────
+  const ventasFiltradas = busqVentas.trim()
+    ? ventas.filter(v => {
+        const q = busqVentas.toLowerCase();
+        return v.numero.toLowerCase().includes(q) ||
+          (v.cliente_nombre ?? "").toLowerCase().includes(q) ||
+          (v.vendedor_nombre ?? "").toLowerCase().includes(q) ||
+          v.fecha.includes(q) ||
+          v.metodo_pago.replace(/_/g, " ").includes(q) ||
+          v.total.includes(q) ||
+          v.estado.toLowerCase().includes(q);
+      })
+    : ventas;
 
   // ── Productos filtrados (siempre visibles) ─────────────────────────────────
   const repFiltrados = busqueda.trim()
@@ -681,17 +701,18 @@ export default function VentasPage() {
         {/* Tabla principal */}
         <div className="flex-1 min-w-0 rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex border-b border-slate-200 px-5">
-            {(["ventas", "cotizaciones"] as Tab[]).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTab(t)}
-                className={`-mb-px mr-4 border-b-2 py-3 text-sm font-medium transition-colors flex items-center gap-1.5
-                  ${tab === t ? "border-slate-800 text-slate-800" : "border-transparent text-slate-400 hover:text-slate-600"}`}
-              >
-                {t === "ventas" ? <><ShoppingCart className="h-4 w-4" /> Ventas ({ventas.length})</> : <><FileText className="h-4 w-4" /> Cotizaciones ({cotizaciones.length})</>}
-              </button>
-            ))}
+            <button type="button" onClick={() => setTab("ventas")}
+              className={`-mb-px mr-4 border-b-2 py-3 text-sm font-medium transition-colors flex items-center gap-1.5 ${tab === "ventas" ? "border-slate-800 text-slate-800" : "border-transparent text-slate-400 hover:text-slate-600"}`}>
+              <ShoppingCart className="h-4 w-4" /> Ventas ({ventas.length})
+            </button>
+            <button type="button" onClick={() => setTab("cotizaciones")}
+              className={`-mb-px mr-4 border-b-2 py-3 text-sm font-medium transition-colors flex items-center gap-1.5 ${tab === "cotizaciones" ? "border-slate-800 text-slate-800" : "border-transparent text-slate-400 hover:text-slate-600"}`}>
+              <FileText className="h-4 w-4" /> Cotizaciones ({cotizaciones.length})
+            </button>
+            <button type="button" onClick={() => setTab("devoluciones")}
+              className={`-mb-px mr-4 border-b-2 py-3 text-sm font-medium transition-colors flex items-center gap-1.5 ${tab === "devoluciones" ? "border-rose-600 text-rose-600" : "border-transparent text-slate-400 hover:text-slate-600"}`}>
+              <ArrowLeftRight className="h-4 w-4" /> Devoluciones
+            </button>
           </div>
 
           {/* Tab Ventas */}
@@ -700,17 +721,29 @@ export default function VentasPage() {
               {ventas.length === 0 ? (
                 <EmptyTab icon={<ShoppingCart className="h-10 w-10 mb-3" />} label="Aún no hay ventas" action={<Button onClick={() => { resetForm(); setModalVenta(true); }} className="mt-4 bg-slate-800 text-white text-sm"><Plus className="h-4 w-4 mr-1" />Primera venta</Button>} />
               ) : (
-                <table className="w-full text-sm">
+                <>
+                  <div className="border-b border-slate-100 px-4 py-2">
+                    <div className="relative max-w-sm">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                      <input
+                        className="w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-3 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:bg-white"
+                        placeholder="Buscar por número, cliente, vendedor, fecha…"
+                        value={busqVentas}
+                        onChange={e => setBusqVentas(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <table className="w-full text-sm border-collapse [&_td]:border [&_td]:border-slate-200">
                   <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50">
-                      {["ID / FECHA", "CLIENTE", "VENDEDOR", "TOTAL", "MÉTODO", "ESTADO", "ACCIONES"].map((h) => (
-                        <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold tracking-wider text-slate-400 whitespace-nowrap">{h}</th>
+                    <tr>
+                      {["ID / FECHA", "CLIENTE", "VENDEDOR", "TOTAL", "MÉTODO DE PAGO", "ESTADO", "ACCIONES"].map((h) => (
+                        <th key={h} className="border border-amber-500 bg-amber-400 px-3 py-2 text-left font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px]">{h}</th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {ventas.map((v) => (
-                      <tr key={v.id} className="hover:bg-slate-50/50">
+                  <tbody>
+                    {ventasFiltradas.map((v, idx) => (
+                      <tr key={v.id} className={idx % 2 === 0 ? "bg-white hover:bg-amber-100/60" : "bg-amber-50/40 hover:bg-amber-100/60"}>
                         <td className="px-4 py-3">
                           <p className="font-mono text-xs font-semibold text-slate-700">{v.numero}</p>
                           <p className="text-[10px] text-slate-400">{v.fecha} {v.created_at?.slice(11, 16)}</p>
@@ -737,6 +770,7 @@ export default function VentasPage() {
                     ))}
                   </tbody>
                 </table>
+                </>
               )}
             </div>
           )}
@@ -774,17 +808,17 @@ export default function VentasPage() {
                 <EmptyTab icon={<FileText className="h-10 w-10 mb-3" />} label="No hay cotizaciones" action={<Button onClick={() => { resetForm(); setModalCot(true); }} className="mt-4 bg-slate-700 text-white text-sm"><Plus className="h-4 w-4 mr-1" />Nueva cotización</Button>} />
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full text-sm border-collapse [&_td]:border [&_td]:border-slate-200">
                     <thead>
-                      <tr className="border-b border-slate-100 bg-slate-50">
+                      <tr>
                         {["ID / FECHA", "CLIENTE", "VENDEDOR", "TOTAL", "ESTADO", "VÁLIDA HASTA", "ACCIONES"].map((h) => (
-                          <th key={h} className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-semibold tracking-wider text-slate-400">{h}</th>
+                          <th key={h} className="border border-amber-500 bg-amber-400 px-3 py-2 text-left font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px]">{h}</th>
                         ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {cotsFiltradas.map((c) => (
-                        <tr key={c.id} className="hover:bg-slate-50/50">
+                    <tbody>
+                      {cotsFiltradas.map((c, idx) => (
+                        <tr key={c.id} className={idx % 2 === 0 ? "bg-white hover:bg-amber-100/60" : "bg-amber-50/40 hover:bg-amber-100/60"}>
                           <td className="px-3 py-3">
                             <p className="font-mono text-xs font-semibold text-slate-700">{c.numero}</p>
                             <p className="text-[10px] text-slate-400">{c.fecha}</p>
@@ -820,6 +854,13 @@ export default function VentasPage() {
                   </table>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Tab Devoluciones */}
+          {tab === "devoluciones" && (
+            <div className="h-[calc(100vh-280px)]">
+              <DevolucionesTab />
             </div>
           )}
         </div>

@@ -18,11 +18,13 @@ interface AuthState {
   email: string | null;
   empresasDisponibles: EmpresaResumen[];
   networkBlocked: boolean;
+  lastActivity: number | null;
 
   setTokens: (t: TokenResponse) => void;
   setEmail: (email: string) => void;
   setEmpresasDisponibles: (empresas: EmpresaResumen[]) => void;
   setNetworkBlocked: (blocked: boolean) => void;
+  updateActivity: () => void;
   logout: () => void;
 }
 
@@ -36,6 +38,7 @@ export const useAuthStore = create<AuthState>()(
       email: null,
       empresasDisponibles: [],
       networkBlocked: false,
+      lastActivity: null,
 
       setTokens: (t) =>
         set({
@@ -43,10 +46,12 @@ export const useAuthStore = create<AuthState>()(
           refreshToken: t.refresh_token,
           empresaId: t.empresa_id ?? null,
           rol: t.rol ?? null,
+          lastActivity: Date.now(),
         }),
       setEmail: (email) => set({ email }),
       setEmpresasDisponibles: (empresas) => set({ empresasDisponibles: empresas }),
       setNetworkBlocked: (blocked) => set({ networkBlocked: blocked }),
+      updateActivity: () => set({ lastActivity: Date.now() }),
       logout: () =>
         set({
           accessToken: null,
@@ -55,6 +60,7 @@ export const useAuthStore = create<AuthState>()(
           rol: null,
           email: null,
           empresasDisponibles: [],
+          lastActivity: null,
         }),
     }),
     {
@@ -66,6 +72,7 @@ export const useAuthStore = create<AuthState>()(
         empresaId: state.empresaId,
         rol: state.rol,
         email: state.email,
+        lastActivity: state.lastActivity,
       }),
     },
   ),

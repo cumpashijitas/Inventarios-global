@@ -266,17 +266,17 @@ function TabUsuarios() {
 
       {/* Tabla de usuarios */}
       <div className="overflow-auto rounded-lg border border-slate-200" style={{ maxHeight: "calc(100vh - 400px)" }}>
-        <table className="w-full text-sm">
+        <table className="w-full text-sm border-collapse [&_td]:border [&_td]:border-slate-200">
           <thead className="sticky top-0 z-10">
-            <tr className="border-b border-slate-100 bg-slate-50">
-              {["USUARIO", "EMAIL", "ROL", "ESTADO", "FECHA REGISTRO", "ACCIONES"].map((h) => (
-                <th key={h} className="whitespace-nowrap bg-slate-50 px-4 py-2.5 text-left text-[10px] font-semibold tracking-wider text-slate-400">{h}</th>
+            <tr>
+              {["USUARIO", "EMAIL", "ROL", "ESTADO", "FECHA DE REGISTRO", "ACCIONES"].map((h) => (
+                <th key={h} className="border border-amber-500 bg-amber-400 px-3 py-2 text-left font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px]">{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
-            {usuarios.map((u) => (
-              <tr key={u.id} className="hover:bg-slate-50/50">
+          <tbody>
+            {usuarios.map((u, idx) => (
+              <tr key={u.id} className={idx % 2 === 0 ? "bg-white hover:bg-amber-100/60" : "bg-amber-50/40 hover:bg-amber-100/60"}>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     <Avatar nombre={u.nombre} />

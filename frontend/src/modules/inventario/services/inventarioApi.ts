@@ -17,6 +17,19 @@ import type {
   UnidadMedida,
 } from "@/shared/types/api";
 
+// ─── Tipos ───────────────────────────────────────────────────────────────────
+export interface StockBajoItem {
+  id: string;
+  sku: string;
+  nombre: string;
+  marca: string | null;
+  categoria: string | null;
+  proveedor: string | null;
+  stock_actual: number;
+  stock_minimo: number;
+  diferencia: number;
+}
+
 // ─── Tipos parciales para update ─────────────────────────────────────────────
 type ProductoUpdate = Partial<Omit<ProductoIn, "sku">>;
 type ProveedorUpdate = Partial<ProveedorIn>;
@@ -167,5 +180,10 @@ export const inventarioApi = {
   },
   deleteCliente: async (id: string): Promise<void> => {
     await api.delete(`/inventario/clientes/${id}`);
+  },
+
+  listStockBajo: async (): Promise<StockBajoItem[]> => {
+    const r = await api.get<StockBajoItem[]>("/inventario/productos/stock-bajo");
+    return r.data;
   },
 };

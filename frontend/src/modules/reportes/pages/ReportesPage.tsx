@@ -721,17 +721,17 @@ export default function ReportesPage() {
               <div className="px-5 pb-5 text-xs text-slate-400">Sin ventas en este período.</div>
             ) : (
               <div className="overflow-auto max-h-72">
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-white">
-                    <tr className="border-b border-slate-100 bg-slate-50">
-                      {["FECHA", "VENTAS", "TOTAL", "TICKET PROM."].map(h => (
-                        <th key={h} className="px-5 py-2 text-left text-[11px] font-semibold tracking-wider text-slate-400">{h}</th>
+                <table className="w-full text-sm border-collapse [&_td]:border [&_td]:border-slate-200">
+                  <thead className="sticky top-0">
+                    <tr>
+                      {["FECHA", "VENTAS", "TOTAL", "TICKET PROMEDIO"].map(h => (
+                        <th key={h} className="border border-amber-500 bg-amber-400 px-3 py-2 text-left font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px]">{h}</th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {rv.ventas_por_dia.map(d => (
-                      <tr key={d.fecha} className="hover:bg-slate-50/60">
+                  <tbody>
+                    {rv.ventas_por_dia.map((d, idx) => (
+                      <tr key={d.fecha} className={idx % 2 === 0 ? "bg-white hover:bg-amber-100/60" : "bg-amber-50/40 hover:bg-amber-100/60"}>
                         <td className="px-5 py-2.5 text-slate-600 text-xs font-mono">{fmtFecha(d.fecha)}</td>
                         <td className="px-5 py-2.5 text-slate-700">{d.transacciones}</td>
                         <td className="px-5 py-2.5 font-semibold text-slate-800 tabular-nums">{fmtBs(d.total)}</td>
@@ -742,8 +742,8 @@ export default function ReportesPage() {
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr className="border-t-2 border-slate-200 bg-slate-50">
-                      <td className="px-5 py-2.5 text-xs font-semibold text-slate-600">TOTAL</td>
+                    <tr className="border-t-2 border-amber-400 bg-amber-100">
+                      <td className="px-5 py-2.5 text-xs font-bold text-slate-800 border border-slate-200">TOTAL</td>
                       <td className="px-5 py-2.5 font-semibold text-slate-700">{rv.resumen.transacciones}</td>
                       <td className="px-5 py-2.5 font-bold text-indigo-700 tabular-nums">{fmtBs(rv.resumen.ingresos_totales)}</td>
                       <td className="px-5 py-2.5 font-semibold text-slate-700 tabular-nums">{fmtBs(rv.resumen.ticket_promedio)}</td>
@@ -858,17 +858,17 @@ export default function ReportesPage() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm border-collapse [&_td]:border [&_td]:border-slate-200">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50">
+                  <tr>
                     {["FECHA", "TIPO", "SKU", "PRODUCTO", "ALMACÉN", "CANTIDAD", "VALOR"].map(h => (
-                      <th key={h} className="px-5 py-2.5 text-left text-[11px] font-semibold tracking-wider text-slate-400 whitespace-nowrap">{h}</th>
+                      <th key={h} className="border border-amber-500 bg-amber-400 px-3 py-2 text-left font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px]">{h}</th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {movData.items.map(m => (
-                    <tr key={m.id} className="hover:bg-slate-50/60">
+                <tbody>
+                  {movData.items.map((m, idx) => (
+                    <tr key={m.id} className={idx % 2 === 0 ? "bg-white hover:bg-amber-100/60" : "bg-amber-50/40 hover:bg-amber-100/60"}>
                       <td className="px-5 py-3 font-mono text-xs text-slate-500">
                         {new Date(m.created_at).toLocaleDateString("es")}
                       </td>

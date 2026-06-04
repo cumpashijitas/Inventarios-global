@@ -79,22 +79,22 @@ function TablaMovimientos({ movimientos }: { movimientos: MovimientoCaja[] }) {
   }
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-sm border-collapse [&_td]:border [&_td]:border-slate-200">
         <thead>
-          <tr className="border-b border-slate-100 bg-slate-50">
-            {["HORA", "TIPO", "REFERENCIA", "MÉTODO", "MONTO", "SALDO"].map((h) => (
-              <th key={h} className="px-4 py-2 text-left text-[11px] font-semibold tracking-wider text-slate-400">
+          <tr>
+            {["HORA", "TIPO", "REFERENCIA", "MÉTODO DE PAGO", "MONTO", "SALDO"].map((h) => (
+              <th key={h} className="border border-amber-500 bg-amber-400 px-3 py-2 text-left font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px]">
                 {h}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
-          {movimientos.map((m) => {
+        <tbody>
+          {movimientos.map((m, idx) => {
             const montoNum = parseFloat(m.monto);
             const saldoNum = parseFloat(m.saldo_acumulado);
             return (
-              <tr key={m.id} className="hover:bg-slate-50/60">
+              <tr key={m.id} className={idx % 2 === 0 ? "bg-white hover:bg-amber-100/60" : "bg-amber-50/40 hover:bg-amber-100/60"}>
                 <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{formatHora(m.created_at)}</td>
                 <td className="px-4 py-2.5"><TipoBadge tipo={m.tipo} /></td>
                 <td className="px-4 py-2.5 max-w-[160px] truncate text-slate-700">
@@ -490,21 +490,21 @@ export default function CajaPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm border-collapse [&_td]:border [&_td]:border-slate-200">
                   <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50">
-                      {["FECHA", "CAJERO", "S. INICIAL", "INGRESOS", "RETIROS", "VENTAS", "S. CALCULADO", "S. CONTADO", "DIF.", "ESTADO", ""].map((h) => (
-                        <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold tracking-wider text-slate-400 whitespace-nowrap">
+                    <tr>
+                      {["FECHA", "CAJERO", "SALDO INICIAL", "INGRESOS", "RETIROS", "VENTAS", "SALDO CALCULADO", "SALDO CONTADO", "DIFERENCIA", "ESTADO", ""].map((h) => (
+                        <th key={h} className="border border-amber-500 bg-amber-400 px-3 py-2 text-left font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px]">
                           {h}
                         </th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {historial.map((s) => {
+                  <tbody>
+                    {historial.map((s, idx) => {
                       const dif = parseFloat(s.diferencia ?? "0");
                       return (
-                        <tr key={s.id} className="hover:bg-slate-50/60 transition-colors">
+                        <tr key={s.id} className={idx % 2 === 0 ? "bg-white hover:bg-amber-100/60" : "bg-amber-50/40 hover:bg-amber-100/60"}>
                           <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
                             <span className="font-medium">{formatFechaCorta(s.abierta_en)}</span>
                             <br />

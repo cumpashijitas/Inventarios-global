@@ -13,6 +13,7 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { dashboardApi } from "@/modules/dashboard/services/dashboardApi";
@@ -80,6 +81,7 @@ function StatCard({
   value,
   badge,
   badgeColor,
+  onClick,
 }: {
   icon: React.ElementType;
   iconBg: string;
@@ -88,9 +90,13 @@ function StatCard({
   value: string;
   badge?: string;
   badgeColor?: string;
+  onClick?: () => void;
 }) {
   return (
-    <Card className="border-slate-200 shadow-sm">
+    <Card
+      className={`border-slate-200 shadow-sm transition-all ${onClick ? "cursor-pointer hover:shadow-md hover:border-orange-300" : ""}`}
+      onClick={onClick}
+    >
       <CardContent className="pt-5 pb-4">
         <div className="flex items-start justify-between">
           <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconBg}`}>
@@ -105,6 +111,7 @@ function StatCard({
         <div className="mt-3">
           <p className="text-xs text-slate-500">{label}</p>
           <p className="mt-0.5 text-2xl font-bold tracking-tight text-slate-800">{value}</p>
+          {onClick && <p className="text-[10px] text-orange-500 mt-0.5">Ver listado →</p>}
         </div>
       </CardContent>
     </Card>
@@ -230,6 +237,7 @@ function ActividadFeed({ items }: { items: ActividadItem[] }) {
 // PÁGINA PRINCIPAL
 // =============================================================================
 export default function DashboardPage() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -365,6 +373,7 @@ export default function DashboardPage() {
             value={String(stats.stock_bajo)}
             badge={stats.stock_bajo > 0 ? "Atención" : undefined}
             badgeColor="bg-orange-100 text-orange-700"
+            onClick={stats.stock_bajo > 0 ? () => navigate("/reportes/bajo-stock") : undefined}
           />
         ) : (
           <StatCard

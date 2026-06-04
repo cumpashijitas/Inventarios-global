@@ -13,7 +13,7 @@ import {
   ShoppingCart,
   Sun,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { api } from "@/shared/api/client";
@@ -43,15 +43,50 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/administracion/configuracion", label: "Configuración", icon: Settings, end: true, permiso: "configuracion" },
 ];
 
+// Cierra sesión automáticamente tras 45 minutos de inactividad
+const SESSION_TIMEOUT_MS = 45 * 60 * 1000;
+
 export function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const { email, rol, logout, networkBlocked, setNetworkBlocked } = useAuthStore();
+  const { email, rol, logout, networkBlocked, setNetworkBlocked, lastActivity, updateActivity } = useAuthStore();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [networkChecked, setNetworkChecked] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
+
+  // ── Auto-logout por inactividad ───────────────────────────────────────────
+  const checkSession = useCallback(() => {
+    if (!lastActivity) return;
+    if (Date.now() - lastActivity > SESSION_TIMEOUT_MS) {
+      logout();
+      navigate("/login", { replace: true });
+    }
+  }, [lastActivity, logout, navigate]);
+
+  useEffect(() => {
+    // Verificar al montar (volver a la pestaña después de tiempo)
+    checkSession();
+
+    // Verificar cuando el usuario vuelve a la pestaña
+    const onVisible = () => { if (document.visibilityState === "visible") checkSession(); };
+    document.addEventListener("visibilitychange", onVisible);
+
+    // Chequeo periódico cada minuto
+    const interval = setInterval(checkSession, 60_000);
+
+    // Actualizar lastActivity en cualquier interacción del usuario
+    const EVENTS = ["mousedown", "keydown", "touchstart", "scroll"] as const;
+    const onActivity = () => updateActivity();
+    EVENTS.forEach((e) => window.addEventListener(e, onActivity, { passive: true }));
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(interval);
+      EVENTS.forEach((e) => window.removeEventListener(e, onActivity));
+    };
+  }, [checkSession, updateActivity]);
 
   useEffect(() => {
     if (rol === "admin") { setNetworkChecked(true); return; }
@@ -196,7 +231,7 @@ export function AppShell() {
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto">
-          <div className="container max-w-7xl py-4 px-3 sm:py-6 sm:px-6">
+          <div className="w-full py-4 px-3 sm:py-6 sm:px-6">
             <Outlet />
           </div>
         </main>

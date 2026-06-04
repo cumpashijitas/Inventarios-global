@@ -1,5 +1,5 @@
 import {
-  AlertTriangle, BookOpen, Building2, Car, Copy, CreditCard, Eye, FolderOpen,
+  AlertTriangle, BookOpen, Building2, Car, Copy, CreditCard, Download, Eye, FolderOpen,
   Gem, ImageIcon, Info, Mail, MapPin, Package, Pencil, Phone,
   Plus, Ruler, Search, ShieldCheck, Tag, Trash2, User, X,
 } from "lucide-react";
@@ -109,6 +109,36 @@ export default function InventarioPage() {
   const [catForm, setCatForm] = useState<Partial<CategoriaIn>>({});
 
   // ── Carga inicial ─────────────────────────────────────────────────────────
+  const exportarCSV = () => {
+    const headers = [
+      "CÓDIGO MARCA", "CÓDIGO UNIVERSAL", "DESCRIPCIÓN", "MARCA", "PROCEDENCIA",
+      "COSTO COMPRA UNITARIO", "COSTO COMPRA CAJA", "PRECIO FACTURA", "PRECIO POR MAYOR",
+      "PRECIO TALLER", "PRECIO MAYORISTA", "CATEGORÍA", "INDUSTRIA", "MOTOR",
+      "MODELO", "MEDIDA", "PROVEEDOR", "CANTIDAD", "STOCK MÍNIMO", "UNIDAD",
+    ];
+    const escape = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const rows = filtroProd.map(p => [
+      p.sku, p.codigo_universal ?? "",
+      p.nombre, p.marca ?? "", p.procedencia ?? "",
+      p.precio_compra, p.costo_caja ?? "",
+      p.precio_venta, p.precio_mayor ?? "", p.precio_mecanico ?? "", p.precio_real ?? "",
+      categorias.find(c => c.id === p.categoria_id)?.nombre ?? "",
+      p.industria ?? "", p.motor ?? "", p.modelos ?? "", p.medidas ?? "",
+      proveedores.find(pv => pv.id === p.proveedor_id)?.razon_social ?? "",
+      Math.round(Number(p.stock_total ?? 0)),
+      Math.round(parseFloat(p.stock_minimo)),
+      unidades.find(u => u.id === p.unidad_id)?.codigo ?? "",
+    ].map(escape).join(","));
+    const csv = "﻿" + [headers.map(escape).join(","), ...rows].join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
+    a.download = `inventario_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const cargarProductos = async () => {
     const r = await inventarioApi.listProductos({ page_size: 200 });
     setProductos(r.items);
@@ -153,11 +183,25 @@ export default function InventarioPage() {
   ];
 
   // ── Filtros ───────────────────────────────────────────────────────────────
-  const filtroProd = productos.filter((p) =>
-    p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-    p.sku.toLowerCase().includes(busqueda.toLowerCase()) ||
-    (p.marca ?? "").toLowerCase().includes(busqueda.toLowerCase()),
-  );
+  const filtroProd = productos.filter((p) => {
+    if (!busqueda) return true;
+    const q = busqueda.toLowerCase();
+    const catNombre = categorias.find(c => c.id === p.categoria_id)?.nombre ?? "";
+    const provNombre = proveedores.find(pv => pv.id === p.proveedor_id)?.razon_social ?? "";
+    return (
+      p.sku.toLowerCase().includes(q) ||
+      (p.codigo_universal ?? "").toLowerCase().includes(q) ||
+      p.nombre.toLowerCase().includes(q) ||
+      (p.marca ?? "").toLowerCase().includes(q) ||
+      (p.procedencia ?? "").toLowerCase().includes(q) ||
+      (p.motor ?? "").toLowerCase().includes(q) ||
+      (p.modelos ?? "").toLowerCase().includes(q) ||
+      catNombre.toLowerCase().includes(q) ||
+      (p.industria ?? "").toLowerCase().includes(q) ||
+      (p.medidas ?? "").toLowerCase().includes(q) ||
+      provNombre.toLowerCase().includes(q)
+    );
+  });
   const filtroProv = proveedores.filter((p) =>
     p.razon_social.toLowerCase().includes(busqueda.toLowerCase()) ||
     (p.ciudad ?? "").toLowerCase().includes(busqueda.toLowerCase()),
@@ -183,6 +227,8 @@ export default function InventarioPage() {
       precio_compra: p.precio_compra, precio_venta: p.precio_venta,
       precio_mecanico: p.precio_mecanico ?? undefined,
       precio_mayor: p.precio_mayor ?? undefined,
+      precio_real: p.precio_real ?? undefined,
+      costo_caja: p.costo_caja ?? undefined,
       stock_minimo: Math.round(parseFloat(p.stock_minimo)),
       marca: p.marca ?? undefined,
       ubicacion: p.ubicacion ?? undefined, aplicacion: p.aplicacion ?? undefined,
@@ -192,6 +238,10 @@ export default function InventarioPage() {
       categoria_id: p.categoria_id ?? undefined,
       controla_stock: p.controla_stock, activo: p.activo,
       peso: p.peso ?? undefined,
+      codigo_universal: p.codigo_universal ?? undefined,
+      procedencia: p.procedencia ?? undefined,
+      industria: p.industria ?? undefined,
+      motor: p.motor ?? undefined,
     });
     setStockInicial(Math.round(p.stock_total ?? 0));   // pre-carga el stock actual
     setImgPreview(p.imagen_url ?? null);               // pre-carga imagen existente
@@ -209,6 +259,8 @@ export default function InventarioPage() {
       precio_venta: p.precio_venta,
       precio_mecanico: p.precio_mecanico ?? undefined,
       precio_mayor: p.precio_mayor ?? undefined,
+      precio_real: p.precio_real ?? undefined,
+      costo_caja: p.costo_caja ?? undefined,
       stock_minimo: Math.round(parseFloat(p.stock_minimo)),
       marca: p.marca ?? undefined,
       ubicacion: p.ubicacion ?? undefined,
@@ -223,6 +275,10 @@ export default function InventarioPage() {
       activo: true,
       peso: p.peso ?? undefined,
       unidad_id: p.unidad_id,
+      codigo_universal: p.codigo_universal ?? undefined,
+      procedencia: p.procedencia ?? undefined,
+      industria: p.industria ?? undefined,
+      motor: p.motor ?? undefined,
     });
     setStockClon(Math.round(Number(p.stock_total ?? 0)));
     setClonarModal({ open: true, item: p });
@@ -425,14 +481,14 @@ export default function InventarioPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="flex flex-col gap-3" style={{ height: "calc(100vh - 80px)" }}>
       {/* Stats bar */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="shrink-0 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {STATS_BAR.map((s) => (
           <Card key={s.label} className="border-slate-200 shadow-sm">
-            <CardContent className="px-4 py-3">
+            <CardContent className="px-3 py-2">
               <p className="text-xs text-slate-500">{s.label}</p>
-              <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+              <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
               {s.sub && <p className="text-[10px] text-slate-400">{s.sub}</p>}
             </CardContent>
           </Card>
@@ -440,7 +496,7 @@ export default function InventarioPage() {
       </div>
 
       {/* Tabs */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex-1 min-h-0 flex flex-col rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
         <div className="flex border-b border-slate-200 px-5 pt-1">
           {(["productos", "proveedores", "clientes", "categorias"] as Tab[]).map((t) => {
             const labels: Record<Tab, string> = { productos: "Productos", proveedores: "Proveedores", clientes: "Clientes", categorias: "Categorías" };
@@ -462,16 +518,28 @@ export default function InventarioPage() {
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder={tab === "productos" ? "Buscar por nombre, SKU o marca…" : tab === "proveedores" ? "Buscar por nombre o ciudad…" : tab === "clientes" ? "Buscar por nombre o NIT…" : "Buscar por nombre de categoría…"}
+              placeholder={tab === "productos" ? "Buscar por código, descripción, marca, procedencia, motor, modelo, categoría, industria, medida, proveedor…" : tab === "proveedores" ? "Buscar por nombre o ciudad…" : tab === "clientes" ? "Buscar por nombre o NIT…" : "Buscar por nombre de categoría…"}
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
             />
           </div>
+          {/* Exportar CSV — solo en tab productos */}
+          {tab === "productos" && filtroProd.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={exportarCSV}
+              className="gap-1.5 text-sm border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+              title="Exportar inventario actual a Excel/CSV"
+            >
+              <Download className="h-4 w-4" />
+              Exportar Excel
+            </Button>
+          )}
           {/* Botón Agregar: visible para todos en clientes, solo para quienes pueden editar en el resto */}
           {(puedeEditar || tab === "clientes") && (
             <Button
               onClick={tab === "productos" ? abrirNuevoProducto : tab === "proveedores" ? abrirNuevoProveedor : tab === "clientes" ? abrirNuevoCliente : abrirNuevaCategoria}
-              className="ml-auto gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm"
+              className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm"
             >
               <Plus className="h-4 w-4" />
               {tab === "productos" ? "Agregar Producto" : tab === "proveedores" ? "Agregar Proveedor" : tab === "clientes" ? "Agregar Cliente" : "Agregar Categoría"}
@@ -482,63 +550,116 @@ export default function InventarioPage() {
         {/* ── Tab: Productos ── */}
         {tab === "productos" && (
           filtroProd.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-300">
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-300">
               <Search className="h-10 w-10 mb-3" />
               <p className="text-sm">{busqueda ? "Sin resultados para tu búsqueda" : "Aún no hay productos. ¡Agrega el primero!"}</p>
             </div>
           ) : (
-            <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 320px)" }}>
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 z-10">
-                  <tr className="border-b border-slate-100 bg-slate-50">
-                    {["", "SKU", "PRODUCTO", "CATEGORÍA", "STOCK", "P. UNITARIO", "P. MECÁNICO", "P. MAYOR", "P. REAL", "MARCA", "ESTADO", "UBICACIÓN", "ACCIONES"].map((h) => (
-                      <th key={h} className="whitespace-nowrap bg-slate-50 px-4 py-2.5 text-left text-[10px] font-semibold tracking-wider text-slate-400">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filtroProd.map((p) => (
-                    <tr key={p.id} className="hover:bg-slate-50/50">
-                      <td className="px-3 py-2">
-                        {p.imagen_url ? (
-                          <img src={p.imagen_url} alt={p.nombre}
-                            className="h-10 w-10 rounded-lg object-cover border border-slate-100 shadow-sm" />
-                        ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
-                            <ImageIcon className="h-4 w-4 text-slate-300" />
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs text-slate-500">{p.sku}</td>
-                      <td className="px-4 py-3 max-w-[180px]">
-                        <p className="font-semibold text-slate-800 leading-tight">{p.nombre}</p>
-                        {p.aplicacion && <p className="text-[10px] text-indigo-500 mt-0.5 truncate">{p.aplicacion}</p>}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
-                        {categorias.find((c) => c.id === p.categoria_id)?.nombre ?? "—"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <StockBadge stock={p.stock_total ?? 0} min={parseFloat(p.stock_minimo)} />
-                      </td>
-                      <td className="px-4 py-3 text-slate-700 font-mono">{fmtBs(p.precio_venta)}</td>
-                      <td className="px-4 py-3 text-slate-700 font-mono">{p.precio_mecanico ? fmtBs(p.precio_mecanico) : "—"}</td>
-                      <td className="px-4 py-3 text-slate-700 font-mono">{p.precio_mayor ? fmtBs(p.precio_mayor) : "—"}</td>
-                      <td className="px-4 py-3 font-mono font-semibold text-indigo-600">{fmtBs(p.precio_compra)}</td>
-                      <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{p.marca ?? "—"}</td>
-                      <td className="px-4 py-3"><EstadoBadge activo={p.activo} /></td>
-                      <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs">{p.ubicacion ?? "—"}</td>
-                      <td className="px-4 py-3">
-                        <AccionesBtn
-                          onVer={() => abrirVerProducto(p)}
-                          onCopiar={puedeEditar ? () => abrirClonarProducto(p) : undefined}
-                          onEditar={puedeEditar ? () => abrirEditarProducto(p) : undefined}
-                          onEliminar={puedeEditar ? () => confirmarEliminar(p.nombre, () => inventarioApi.deleteProducto(p.id).then(cargarProductos)) : undefined}
-                        />
-                      </td>
+            <div className="flex-1 min-h-0 overflow-auto">
+              {puedeEditar ? (
+                /* ── TABLA ADMINISTRADOR (19 columnas) ── */
+                <table className="border-collapse text-[11px]" style={{ minWidth: "max-content", width: "100%" }}>
+                  <thead className="sticky top-0 z-10">
+                    <tr>
+                      {["CANTIDAD", "STOCK MÍNIMO", "UNIDAD", "CÓDIGO MARCA", "CÓDIGO UNIVERSAL", "DESCRIPCIÓN", "MARCA", "PROCEDENCIA",
+                        "COSTO COMPRA UNITARIO", "COSTO COMPRA CAJA", "PRECIO FACTURA", "PRECIO POR MAYOR", "PRECIO TALLER", "PRECIO MAYORISTA",
+                        "CATEGORÍA", "INDUSTRIA", "MODELO", "MEDIDA", "PROVEEDOR", "ACCIONES"].map((h) => (
+                        <th key={h} className="border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px]">{h}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filtroProd.map((p, idx) => {
+                      const catNombre = categorias.find(c => c.id === p.categoria_id)?.nombre ?? "—";
+                      const provNombre = proveedores.find(pv => pv.id === p.proveedor_id)?.razon_social ?? "—";
+                      const unidCodigo = unidades.find(u => u.id === p.unidad_id)?.codigo ?? "—";
+                      const stockNum = Math.round(Number(p.stock_total ?? 0));
+                      const minNum = Math.round(parseFloat(p.stock_minimo));
+                      const stockColor = stockNum === 0 ? "text-red-600 font-bold" : stockNum < minNum ? "text-orange-500 font-bold" : "text-slate-800 font-semibold";
+                      const rowBg = idx % 2 === 0 ? "bg-white" : "bg-amber-50/40";
+                      return (
+                        <tr key={p.id} className={`${rowBg} hover:bg-amber-100/60 ${!p.activo ? "opacity-50" : ""}`}>
+                          <td className={`border border-slate-200 px-2 py-1 text-center font-mono ${stockColor}`}>{stockNum}</td>
+                          <td className="border border-slate-200 px-2 py-1 text-center font-mono text-slate-500">{minNum}</td>
+                          <td className="border border-slate-200 px-2 py-1 text-center text-slate-600">{unidCodigo}</td>
+                          <td className="border border-slate-200 px-2 py-1 font-mono text-indigo-700 font-semibold whitespace-nowrap">{p.sku}</td>
+                          <td className="border border-slate-200 px-2 py-1 font-mono text-slate-500 whitespace-nowrap">{p.codigo_universal ?? "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 max-w-[200px]">
+                            <p className="font-semibold text-slate-800 truncate leading-tight">{p.nombre}</p>
+                          </td>
+                          <td className="border border-slate-200 px-2 py-1 text-slate-600 whitespace-nowrap">{p.marca ?? "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 text-slate-600 whitespace-nowrap">{p.procedencia ?? "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 font-mono text-right text-slate-700 whitespace-nowrap">{fmtBs(p.precio_compra)}</td>
+                          <td className="border border-slate-200 px-2 py-1 font-mono text-right text-slate-500 whitespace-nowrap">{p.costo_caja ? fmtBs(p.costo_caja) : "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 font-mono text-right font-semibold text-emerald-700 whitespace-nowrap">{fmtBs(p.precio_venta)}</td>
+                          <td className="border border-slate-200 px-2 py-1 font-mono text-right text-slate-700 whitespace-nowrap">{p.precio_mayor ? fmtBs(p.precio_mayor) : "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 font-mono text-right text-slate-700 whitespace-nowrap">{p.precio_mecanico ? fmtBs(p.precio_mecanico) : "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 font-mono text-right text-blue-700 font-semibold whitespace-nowrap">{p.precio_real ? fmtBs(p.precio_real) : "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 text-slate-600 whitespace-nowrap">{catNombre}</td>
+                          <td className="border border-slate-200 px-2 py-1 text-slate-600 whitespace-nowrap">{p.industria ?? "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 text-slate-500 max-w-[140px] truncate">{p.modelos ?? "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 text-slate-500 whitespace-nowrap">{p.medidas ?? "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 text-slate-600 whitespace-nowrap max-w-[130px] truncate">{provNombre}</td>
+                          <td className="border border-slate-200 px-2 py-1 whitespace-nowrap">
+                            <AccionesBtn
+                              onVer={() => abrirVerProducto(p)}
+                              onCopiar={() => abrirClonarProducto(p)}
+                              onEditar={() => abrirEditarProducto(p)}
+                              onEliminar={() => confirmarEliminar(p.nombre, () => inventarioApi.deleteProducto(p.id).then(cargarProductos))}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                /* ── TABLA VENDEDOR (15 columnas) ── */
+                <table className="border-collapse text-[11px]" style={{ minWidth: "max-content", width: "100%" }}>
+                  <thead className="sticky top-0 z-10">
+                    <tr>
+                      {["CANTIDAD", "STOCK MÍNIMO", "CÓDIGO MARCA", "CÓDIGO UNIVERSAL", "DESCRIPCIÓN", "MARCA",
+                        "PROCEDENCIA", "UNIDAD", "PRECIO FACTURA", "PRECIO POR MAYOR", "PRECIO TALLER", "PRECIO MAYORISTA",
+                        "MOTOR", "MODELO", "UBICACIÓN", "VER"].map((h) => (
+                        <th key={h} className="border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px]">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtroProd.map((p, idx) => {
+                      const unidCodigo = unidades.find(u => u.id === p.unidad_id)?.codigo ?? "—";
+                      const stockNum = Math.round(Number(p.stock_total ?? 0));
+                      const minNum = Math.round(parseFloat(p.stock_minimo));
+                      const stockColor = stockNum === 0 ? "text-red-600 font-bold" : stockNum < minNum ? "text-orange-500 font-bold" : "text-slate-800 font-semibold";
+                      const rowBg = idx % 2 === 0 ? "bg-white" : "bg-amber-50/40";
+                      return (
+                        <tr key={p.id} className={`${rowBg} hover:bg-amber-100/60 ${!p.activo ? "opacity-50" : ""}`}>
+                          <td className={`border border-slate-200 px-2 py-1 text-center font-mono ${stockColor}`}>{stockNum}</td>
+                          <td className="border border-slate-200 px-2 py-1 text-center font-mono text-slate-500">{minNum}</td>
+                          <td className="border border-slate-200 px-2 py-1 font-mono text-indigo-700 font-semibold whitespace-nowrap">{p.sku}</td>
+                          <td className="border border-slate-200 px-2 py-1 font-mono text-slate-500 whitespace-nowrap">{p.codigo_universal ?? "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 max-w-[200px]">
+                            <p className="font-semibold text-slate-800 truncate leading-tight">{p.nombre}</p>
+                          </td>
+                          <td className="border border-slate-200 px-2 py-1 text-slate-600 whitespace-nowrap">{p.marca ?? "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 text-slate-600 whitespace-nowrap">{p.procedencia ?? "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 text-center text-slate-600">{unidCodigo}</td>
+                          <td className="border border-slate-200 px-2 py-1 font-mono text-right font-semibold text-emerald-700 whitespace-nowrap">{fmtBs(p.precio_venta)}</td>
+                          <td className="border border-slate-200 px-2 py-1 font-mono text-right text-slate-700 whitespace-nowrap">{p.precio_mayor ? fmtBs(p.precio_mayor) : "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 font-mono text-right text-slate-700 whitespace-nowrap">{p.precio_mecanico ? fmtBs(p.precio_mecanico) : "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 font-mono text-right text-blue-700 font-semibold whitespace-nowrap">{p.precio_real ? fmtBs(p.precio_real) : "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 text-slate-600 whitespace-nowrap">{p.motor ?? "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 text-slate-500 max-w-[140px] truncate">{p.modelos ?? "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 text-slate-500 whitespace-nowrap">{p.ubicacion ?? "—"}</td>
+                          <td className="border border-slate-200 px-2 py-1 whitespace-nowrap">
+                            <AccionesBtn onVer={() => abrirVerProducto(p)} />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
           )
         )}
@@ -546,12 +667,12 @@ export default function InventarioPage() {
         {/* ── Tab: Proveedores ── */}
         {tab === "proveedores" && (
           filtroProv.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-300">
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-300">
               <User className="h-10 w-10 mb-3" />
               <p className="text-sm">{busqueda ? "Sin resultados" : "Aún no hay proveedores"}</p>
             </div>
           ) : (
-            <div className="grid gap-4 p-5 sm:grid-cols-2">
+            <div className="flex-1 min-h-0 overflow-auto p-5 grid gap-4 sm:grid-cols-2 content-start">
               {filtroProv.map((p) => {
                 const numProductos = productos.filter((pr) => pr.proveedor_id === p.id).length;
                 return (
@@ -640,23 +761,23 @@ export default function InventarioPage() {
         {/* ── Tab: Clientes ── */}
         {tab === "clientes" && (
           filtroCli.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-300">
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-300">
               <User className="h-10 w-10 mb-3" />
               <p className="text-sm">{busqueda ? "Sin resultados" : "Aún no hay clientes"}</p>
             </div>
           ) : (
-            <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 320px)" }}>
-              <table className="w-full text-sm">
+            <div className="flex-1 min-h-0 overflow-auto">
+              <table className="w-full text-sm border-collapse [&_td]:border [&_td]:border-slate-200">
                 <thead className="sticky top-0 z-10">
-                  <tr className="border-b border-slate-100 bg-slate-50">
-                    {["CLIENTE", "NIT/RUC", "TIPO", "CONTACTO", "CIUDAD", "DESCUENTO", "ESTADO", "ACCIONES"].map((h) => (
-                      <th key={h} className="whitespace-nowrap bg-slate-50 px-4 py-2.5 text-left text-[10px] font-semibold tracking-wider text-slate-400">{h}</th>
+                  <tr>
+                    {["CLIENTE", "NIT / RUC", "TIPO", "CONTACTO", "CIUDAD", "DESCUENTO", "ESTADO", "ACCIONES"].map((h) => (
+                      <th key={h} className="border border-amber-500 bg-amber-400 px-3 py-2 text-left font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px]">{h}</th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filtroCli.map((c) => (
-                    <tr key={c.id} className="hover:bg-slate-50/50">
+                <tbody>
+                  {filtroCli.map((c, idx) => (
+                    <tr key={c.id} className={idx % 2 === 0 ? "bg-white hover:bg-amber-100/60" : "bg-amber-50/40 hover:bg-amber-100/60"}>
                       <td className="px-4 py-3">
                         <p className="font-semibold text-slate-800">{c.nombre}</p>
                         {c.email && <p className="text-xs text-slate-400">{c.email}</p>}
@@ -687,26 +808,26 @@ export default function InventarioPage() {
         {/* ── Tab: Categorías ── */}
         {tab === "categorias" && (
           filtroCat.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-300">
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-300">
               <FolderOpen className="h-10 w-10 mb-3" />
               <p className="text-sm">{busqueda ? "Sin resultados" : "Aún no hay categorías. ¡Crea la primera!"}</p>
             </div>
           ) : (
-            <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 320px)" }}>
-              <table className="w-full text-sm">
+            <div className="flex-1 min-h-0 overflow-auto">
+              <table className="w-full text-sm border-collapse [&_td]:border [&_td]:border-slate-200">
                 <thead className="sticky top-0 z-10">
-                  <tr className="border-b border-slate-100 bg-slate-50">
+                  <tr>
                     {["NOMBRE", "CATEGORÍA PADRE", "ORDEN", "PRODUCTOS", "ESTADO", "ACCIONES"].map((h) => (
-                      <th key={h} className="whitespace-nowrap bg-slate-50 px-4 py-2.5 text-left text-[10px] font-semibold tracking-wider text-slate-400">{h}</th>
+                      <th key={h} className="border border-amber-500 bg-amber-400 px-3 py-2 text-left font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px]">{h}</th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filtroCat.map((c) => {
+                <tbody>
+                  {filtroCat.map((c, idx) => {
                     const padre = categorias.find((p) => p.id === c.parent_id);
                     const numProductos = productos.filter((p) => p.categoria_id === c.id).length;
                     return (
-                      <tr key={c.id} className="hover:bg-slate-50/50">
+                      <tr key={c.id} className={idx % 2 === 0 ? "bg-white hover:bg-amber-100/60" : "bg-amber-50/40 hover:bg-amber-100/60"}>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-50 text-violet-600">
@@ -877,6 +998,11 @@ export default function InventarioPage() {
                     <div className="col-span-2">
                       <FieldEdit label="Aplicación General" value={pForm.aplicacion ?? ""} onChange={(v) => setPForm((f) => ({ ...f, aplicacion: v }))} placeholder="Ej: Compatible con Toyota, Honda, Nissan" />
                     </div>
+                    <FieldEdit label="Código Universal" value={pForm.codigo_universal ?? ""} onChange={(v) => setPForm((f) => ({ ...f, codigo_universal: v }))} placeholder="Ej: 90915-YZZD4" />
+                    <FieldEdit label="Procedencia" value={pForm.procedencia ?? ""} onChange={(v) => setPForm((f) => ({ ...f, procedencia: v }))} placeholder="Ej: Japón, China, USA" />
+                    <div className="col-span-2">
+                      <FieldEdit label="Industria" value={pForm.industria ?? ""} onChange={(v) => setPForm((f) => ({ ...f, industria: v }))} placeholder="Ej: Automotriz, Industrial, Agrícola" />
+                    </div>
                   </div>
                 </div>
 
@@ -885,11 +1011,13 @@ export default function InventarioPage() {
                   <h3 className="flex items-center gap-1.5 text-xs font-semibold text-green-600 mb-3 pb-1.5 border-b border-slate-100">
                     <ShieldCheck className="h-3.5 w-3.5" /> Precios <span className="text-slate-400 font-normal">(Solo visible para Administrador)</span>
                   </h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    <PrecioField label="Precio Unitario" sublabel="(Público general)" value={String(pForm.precio_venta ?? "")} onChange={(v) => setPForm((f) => ({ ...f, precio_venta: v as unknown as number }))} />
-                    <PrecioField label="Precio Mecánico" sublabel="(Con descuento)" value={String(pForm.precio_mecanico ?? "")} onChange={(v) => setPForm((f) => ({ ...f, precio_mecanico: v as unknown as number }))} />
+                  <div className="grid grid-cols-3 gap-3">
+                    <PrecioField label="Precio Factura" sublabel="(Público general)" value={String(pForm.precio_venta ?? "")} onChange={(v) => setPForm((f) => ({ ...f, precio_venta: v as unknown as number }))} />
+                    <PrecioField label="Precio Taller" sublabel="(Mecánicos)" value={String(pForm.precio_mecanico ?? "")} onChange={(v) => setPForm((f) => ({ ...f, precio_mecanico: v as unknown as number }))} />
                     <PrecioField label="Precio Por Mayor" sublabel="(Compras grandes)" value={String(pForm.precio_mayor ?? "")} onChange={(v) => setPForm((f) => ({ ...f, precio_mayor: v as unknown as number }))} />
-                    <PrecioField label="Precio Real" sublabel="(Costo interno)" value={String(pForm.precio_compra ?? "")} onChange={(v) => setPForm((f) => ({ ...f, precio_compra: v as unknown as number }))} />
+                    <PrecioField label="Precio Mayorista" sublabel="(Precio real venta)" value={String(pForm.precio_real ?? "")} onChange={(v) => setPForm((f) => ({ ...f, precio_real: v as unknown as number }))} />
+                    <PrecioField label="Costo Compra Unitario" sublabel="(Costo interno)" value={String(pForm.precio_compra ?? "")} onChange={(v) => setPForm((f) => ({ ...f, precio_compra: v as unknown as number }))} />
+                    <PrecioField label="Costo Compra Caja" sublabel="(Por caja/paquete)" value={String(pForm.costo_caja ?? "")} onChange={(v) => setPForm((f) => ({ ...f, costo_caja: v as unknown as number }))} />
                   </div>
                 </div>
               </div>
@@ -934,6 +1062,7 @@ export default function InventarioPage() {
               </h3>
               <div className="grid grid-cols-2 gap-3">
                 <FieldEdit label="Marca" value={pForm.marca ?? ""} onChange={(v) => setPForm((f) => ({ ...f, marca: v }))} placeholder="Ej: Bosch, NGK, KYB" />
+                <FieldEdit label="Motor" value={pForm.motor ?? ""} onChange={(v) => setPForm((f) => ({ ...f, motor: v }))} placeholder="Ej: 1.8L, 2.0L, 4AGE, 2JZ" />
                 <FieldEdit label="Peso" value={String(pForm.peso ?? "")} onChange={(v) => setPForm((f) => ({ ...f, peso: v as unknown as number }))} placeholder="Ej: 2.5 kg" />
                 <FieldEdit label="Medidas" value={pForm.medidas ?? ""} onChange={(v) => setPForm((f) => ({ ...f, medidas: v }))} placeholder="Ej: Ø76mm x L90mm" />
                 <div>
@@ -1433,11 +1562,13 @@ export default function InventarioPage() {
               <h3 className="flex items-center gap-1.5 text-xs font-semibold text-green-600 mb-3 pb-1.5 border-b border-slate-100">
                 <Gem className="h-3.5 w-3.5" /> Gestión de Precios
               </h3>
-              <div className="grid grid-cols-2 gap-3">
-                <PrecioField label="Precio Unitario" sublabel="(Público general)" value={String(clonarForm.precio_venta ?? "")} onChange={(v) => setClonarForm((f) => ({ ...f, precio_venta: v as unknown as number }))} />
-                <PrecioField label="Precio Mecánico" sublabel="(Con descuento)" value={String(clonarForm.precio_mecanico ?? "")} onChange={(v) => setClonarForm((f) => ({ ...f, precio_mecanico: v as unknown as number }))} />
+              <div className="grid grid-cols-3 gap-3">
+                <PrecioField label="Precio Factura" sublabel="(Público general)" value={String(clonarForm.precio_venta ?? "")} onChange={(v) => setClonarForm((f) => ({ ...f, precio_venta: v as unknown as number }))} />
+                <PrecioField label="Precio Taller" sublabel="(Mecánicos)" value={String(clonarForm.precio_mecanico ?? "")} onChange={(v) => setClonarForm((f) => ({ ...f, precio_mecanico: v as unknown as number }))} />
                 <PrecioField label="Precio Por Mayor" sublabel="(Compras grandes)" value={String(clonarForm.precio_mayor ?? "")} onChange={(v) => setClonarForm((f) => ({ ...f, precio_mayor: v as unknown as number }))} />
-                <PrecioField label="Precio Real" sublabel="(Costo interno)" value={String(clonarForm.precio_compra ?? "")} onChange={(v) => setClonarForm((f) => ({ ...f, precio_compra: v as unknown as number }))} />
+                <PrecioField label="Precio Mayorista" sublabel="(Precio real venta)" value={String(clonarForm.precio_real ?? "")} onChange={(v) => setClonarForm((f) => ({ ...f, precio_real: v as unknown as number }))} />
+                <PrecioField label="Costo Compra Unitario" sublabel="(Costo interno)" value={String(clonarForm.precio_compra ?? "")} onChange={(v) => setClonarForm((f) => ({ ...f, precio_compra: v as unknown as number }))} />
+                <PrecioField label="Costo Compra Caja" sublabel="(Por caja/paquete)" value={String(clonarForm.costo_caja ?? "")} onChange={(v) => setClonarForm((f) => ({ ...f, costo_caja: v as unknown as number }))} />
               </div>
             </div>
 

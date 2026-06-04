@@ -42,10 +42,12 @@ export interface EmpresaPerfil {
 export interface Producto {
   id: string; sku: string; nombre: string;
   descripcion?: string | null; categoria_id?: string | null; unidad_id: string;
-  precio_compra: string;   // = precioReal
-  precio_venta: string;    // = precioUnitario
+  precio_compra: string;
+  precio_venta: string;
   precio_mecanico?: string | null;
   precio_mayor?: string | null;
+  precio_real?: string | null;
+  costo_caja?: string | null;
   stock_minimo: string; stock_maximo?: string | null;
   controla_stock: boolean; activo: boolean;
   imagen_url?: string | null;
@@ -54,6 +56,10 @@ export interface Producto {
   peso?: string | null; modelos?: string | null;
   anio_desde?: number | null; anio_hasta?: number | null;
   ubicacion?: string | null;
+  codigo_universal?: string | null;
+  procedencia?: string | null;
+  industria?: string | null;
+  motor?: string | null;
   // campo calculado por join en el listado
   stock_total?: number;
   created_at: string; updated_at: string;
@@ -64,6 +70,7 @@ export interface ProductoIn {
   unidad_id: string;
   precio_compra: number | string; precio_venta: number | string;
   precio_mecanico?: number | string | null; precio_mayor?: number | string | null;
+  precio_real?: number | string | null; costo_caja?: number | string | null;
   moneda?: string; stock_minimo: number | string; stock_maximo?: number | string | null;
   controla_stock: boolean; imagen_url?: string | null;
   marca?: string | null; proveedor_id?: string | null;
@@ -71,6 +78,10 @@ export interface ProductoIn {
   peso?: number | string | null; modelos?: string | null;
   anio_desde?: number | null; anio_hasta?: number | null; ubicacion?: string | null;
   activo?: boolean;
+  codigo_universal?: string | null;
+  procedencia?: string | null;
+  industria?: string | null;
+  motor?: string | null;
 }
 
 // ─── Inventario — Almacenes / Stock ──────────────────────────────────────────

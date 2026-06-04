@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle, CheckCircle, ChevronRight, FileSpreadsheet,
-  HelpCircle, Loader2, Plus, Save, Trash2, Upload, X,
+  AlertTriangle, CheckCircle, ChevronRight, Eye, FileSpreadsheet,
+  HelpCircle, Loader2, Plus, Save, Search, Trash2, Upload, X,
 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -18,11 +18,27 @@ import { fmtBs } from "@/shared/utils/format";
 // Tipos internos — fila editable de la planilla
 // ─────────────────────────────────────────────────────────────────────────────
 interface FilaProducto {
-  id: string; sku: string; nombre: string; categoria: string; marca: string;
-  precioReal: string; precioUnitario: string; precioMecanico: string;
-  precioMayor: string; cantidad: string; stockMin: string; ubicacion: string;
-  proveedor: string; aplicacion: string; medidas: string; peso: string;
-  modelos: string; anioDesde: string; anioHasta: string; descripcion: string;
+  id: string;
+  // Mismos campos que tabla inventario admin, mismo orden
+  sku: string;              // CÓDIGO MARCA
+  codigoUniversal: string;  // CÓDIGO UNIVERSAL
+  nombre: string;           // DESCRIPCIÓN
+  marca: string;            // MARCA
+  procedencia: string;      // PROCEDENCIA
+  precioReal: string;       // COSTO COMPRA UNITARIO
+  costoCaja: string;        // COSTO COMPRA CAJA
+  precioUnitario: string;   // PRECIO FACTURA
+  precioMayor: string;      // PRECIO POR MAYOR
+  precioMecanico: string;   // PRECIO TALLER
+  precioMayorista: string;  // PRECIO MAYORISTA
+  categoria: string;        // CATEGORÍA
+  industria: string;        // INDUSTRIA
+  motor: string;            // MOTOR
+  modelos: string;          // MODELO
+  medidas: string;          // MEDIDA
+  proveedor: string;        // PROVEEDOR
+  cantidad: string;         // CANTIDAD
+  stockMin: string;         // STOCK MÍNIMO
   // Matching
   matchStatus: MatchStatus | "manual";
   matchId?: string | null;
@@ -32,11 +48,13 @@ interface FilaProducto {
 }
 
 const FILA_VACIA = (): FilaProducto => ({
-  id: Math.random().toString(36).slice(2), sku: "", nombre: "", categoria: "Motor",
-  marca: "", precioReal: "", precioUnitario: "", precioMecanico: "", precioMayor: "",
-  cantidad: "0", stockMin: "5", ubicacion: "",
-  proveedor: "", aplicacion: "", medidas: "", peso: "",
-  modelos: "", anioDesde: "", anioHasta: "", descripcion: "",
+  id: Math.random().toString(36).slice(2),
+  sku: "", codigoUniversal: "", nombre: "", marca: "", procedencia: "",
+  precioReal: "", costoCaja: "", precioUnitario: "", precioMayor: "",
+  precioMecanico: "", precioMayorista: "",
+  categoria: "Motor", industria: "", motor: "",
+  modelos: "", medidas: "", proveedor: "",
+  cantidad: "0", stockMin: "5",
   matchStatus: "manual",
 });
 
@@ -50,10 +68,11 @@ const MATCH_STYLE: Record<string, { row: string; badge: string; label: string; i
 };
 
 const COLUMNAS = [
-  "#", "SKU", "Nombre", "Categoría", "Marca", "Precio Real", "P. Unitario",
-  "P. Mecánico", "P. Mayor", "Cantidad", "Stock Min", "Ubicación",
-  "Proveedor", "Aplicación", "Medidas", "Peso (kg)", "Modelos",
-  "Año Desde", "Año Hasta", "Descripción", "",
+  "#", "CÓDIGO MARCA", "CÓDIGO UNIVERSAL", "DESCRIPCIÓN", "MARCA", "PROCEDENCIA",
+  "COSTO COMPRA UNITARIO", "COSTO COMPRA CAJA", "PRECIO FACTURA", "PRECIO POR MAYOR",
+  "PRECIO TALLER", "PRECIO MAYORISTA",
+  "CATEGORÍA", "INDUSTRIA", "MOTOR", "MODELO", "MEDIDA", "PROVEEDOR",
+  "CANTIDAD", "STOCK MÍNIMO", "",
 ];
 const CATEGORIAS = ["Motor", "Frenos", "Suspensión", "Filtros", "Eléctrico", "Lubricantes", "Transmisión", "Carrocería"];
 
@@ -62,7 +81,20 @@ const CATEGORIAS = ["Motor", "Frenos", "Suspensión", "Filtros", "Eléctrico", "
 // ─────────────────────────────────────────────────────────────────────────────
 export default function CargaMasivaPage() {
   const [lotes, setLotes]           = useState<Lote[]>([]);
+  const [busqLote, setBusqLote]     = useState("");
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
+
+  const lotesFiltrados = useMemo(() => {
+    const q = busqLote.toLowerCase().trim();
+    if (!q) return lotes;
+    return lotes.filter(l =>
+      l.referencia.toLowerCase().includes(q) ||
+      (l.proveedor_nombre ?? "").toLowerCase().includes(q) ||
+      l.fecha.includes(q) ||
+      (l.notas ?? "").toLowerCase().includes(q) ||
+      l.estado.toLowerCase().includes(q)
+    );
+  }, [lotes, busqLote]);
   const [loteActivo, setLoteActivo] = useState<Lote | null>(null);
   const [filas, setFilas]           = useState<FilaProducto[]>([FILA_VACIA()]);
   const [modalNuevo, setModalNuevo] = useState(false);
@@ -133,26 +165,19 @@ export default function CargaMasivaPage() {
 
         return {
           ...FILA_VACIA(),
-          // SKU siempre del PDF (es el identificador)
           sku: item.sku ?? "",
-
-          // ── Campos estáticos ──────────────────────────────────────────────
-          // Si hay match: se usan los datos del inventario (correctos y ya
-          // revisados). Si es producto nuevo: se usa lo que trajo el PDF.
-          nombre:      isMatch && inv?.nombre      ? inv.nombre                    : (item.nombre      ?? ""),
-          marca:       isMatch && inv?.marca       ? inv.marca                     : (item.marca       ?? ""),
-          aplicacion:  isMatch && inv?.aplicacion  ? inv.aplicacion                : "",
-          medidas:     isMatch && inv?.medidas     ? inv.medidas                   : "",
-          modelos:     isMatch && inv?.modelos     ? inv.modelos                   : (item.modelos     ?? ""),
-          anioDesde:   isMatch && inv?.anio_desde  ? String(inv.anio_desde)        : "",
-          anioHasta:   isMatch && inv?.anio_hasta  ? String(inv.anio_hasta)        : "",
-          descripcion: isMatch && inv?.descripcion ? inv.descripcion               : (item.descripcion ?? ""),
-
-          // ── Campos dinámicos (del PDF) ────────────────────────────────────
-          // Precios y cantidad vienen del proveedor, siempre del PDF.
-          precioReal:  item.precio_compra ?? "",
-          cantidad:    item.cantidad      ?? "0",
-
+          // Si hay match: datos del inventario. Si es nuevo: datos del PDF.
+          nombre:          isMatch && inv?.nombre          ? inv.nombre          : (item.nombre   ?? ""),
+          marca:           isMatch && inv?.marca           ? inv.marca           : (item.marca    ?? ""),
+          medidas:         isMatch && inv?.medidas         ? inv.medidas         : "",
+          modelos:         isMatch && inv?.modelos         ? inv.modelos         : (item.modelos  ?? ""),
+          codigoUniversal: isMatch && inv?.codigo_universal ? inv.codigo_universal : "",
+          procedencia:     isMatch && inv?.procedencia     ? inv.procedencia     : "",
+          industria:       isMatch && inv?.industria       ? inv.industria       : "",
+          motor:           isMatch && inv?.motor           ? inv.motor           : "",
+          // Precios: siempre del PDF (vienen del proveedor)
+          precioReal:      item.precio_compra ?? "",
+          cantidad:        item.cantidad      ?? "0",
           // Matching
           matchStatus: item.match_status,
           matchId:     item.match_id,
@@ -207,33 +232,28 @@ export default function CargaMasivaPage() {
       const n = parseFloat(s.replace(",", "."));
       return isNaN(n) || !isFinite(n) ? fallback : n;
     };
-    const toInt = (s: string) => {
-      if (!s || !s.trim()) return undefined;
-      const n = parseInt(s, 10);
-      return isNaN(n) ? undefined : n;
-    };
 
     try {
       const items = filasValidas.map((f) => ({
-        sku: f.sku.trim(),
-        nombre: f.nombre.trim(),
-        categoria: f.categoria || undefined,
-        marca: f.marca || undefined,
-        precio_real:     toNum(f.precioReal),
-        precio_unitario: toNum(f.precioUnitario),
-        precio_mecanico: toNum(f.precioMecanico),
-        precio_mayor:    toNum(f.precioMayor),
-        cantidad:        toNum(f.cantidad,  0),   // default 0 si no es numérico
-        stock_minimo:    toNum(f.stockMin,  1),
-        ubicacion:  f.ubicacion  || undefined,
-        proveedor:  f.proveedor  || undefined,
-        aplicacion: f.aplicacion || undefined,
-        medidas:    f.medidas    || undefined,
-        peso:       toNum(f.peso),
-        modelos:    f.modelos    || undefined,
-        anio_desde: toInt(f.anioDesde),
-        anio_hasta: toInt(f.anioHasta),
-        descripcion: f.descripcion || undefined,
+        sku:              f.sku.trim(),
+        nombre:           f.nombre.trim(),
+        categoria:        f.categoria        || undefined,
+        marca:            f.marca            || undefined,
+        codigo_universal: f.codigoUniversal  || undefined,
+        procedencia:      f.procedencia      || undefined,
+        industria:        f.industria        || undefined,
+        motor:            f.motor            || undefined,
+        modelos:          f.modelos          || undefined,
+        medidas:          f.medidas          || undefined,
+        proveedor:        f.proveedor        || undefined,
+        precio_real:      toNum(f.precioReal),
+        costo_caja:       toNum(f.costoCaja),
+        precio_unitario:  toNum(f.precioUnitario),
+        precio_mayor:     toNum(f.precioMayor),
+        precio_mecanico:  toNum(f.precioMecanico),
+        precio_mayorista: toNum(f.precioMayorista),
+        cantidad:         toNum(f.cantidad, 0),
+        stock_minimo:     toNum(f.stockMin,  1),
       }));
 
       const updated = await lotesApi.guardar(loteActivo.id, items as Parameters<typeof lotesApi.guardar>[1]);
@@ -297,10 +317,22 @@ export default function CargaMasivaPage() {
       {/* Lista de lotes */}
       {!loteActivo && (
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+          <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-5 py-3">
             <p className="flex items-center gap-2 text-sm font-semibold text-slate-700">
               <FileSpreadsheet className="h-4 w-4 text-teal-500" /> Lotes de Compra
             </p>
+            <div className="relative flex-1 min-w-[220px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+              <input
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-3 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:bg-white"
+                placeholder="Buscar por referencia, proveedor, fecha o estado…"
+                value={busqLote}
+                onChange={e => setBusqLote(e.target.value)}
+              />
+            </div>
+            {busqLote && (
+              <span className="text-xs text-slate-400">{lotesFiltrados.length} resultado{lotesFiltrados.length !== 1 ? "s" : ""}</span>
+            )}
           </div>
           {lotes.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-slate-300">
@@ -310,16 +342,25 @@ export default function CargaMasivaPage() {
                 <Plus className="h-4 w-4 mr-1" /> Crear primer lote
               </Button>
             </div>
+          ) : lotesFiltrados.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-slate-300">
+              <Search className="h-8 w-8 mb-2" />
+              <p className="text-sm">Sin resultados para "{busqLote}"</p>
+            </div>
           ) : (
             <div className="divide-y divide-slate-100">
-              {lotes.map((l) => (
+              {lotesFiltrados.map((l) => (
                 <div key={l.id} className="flex w-full items-center gap-4 px-5 py-4 hover:bg-slate-50/70 transition-colors">
                   <button
                     onClick={() => { setLoteActivo(l); setFilas(l.items?.map(itemToFila) ?? [FILA_VACIA()]); setArchivoNombre(""); }}
                     className="flex flex-1 items-center gap-4 text-left"
                   >
-                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${l.estado === "activo" ? "bg-teal-50 text-teal-600" : "bg-slate-100 text-slate-400"}`}>
-                      <FileSpreadsheet className="h-5 w-5" />
+                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                      l.estado === "activo" ? "bg-teal-50 text-teal-600" :
+                      l.estado === "confirmado" ? "bg-green-50 text-green-600" :
+                      "bg-slate-100 text-slate-400"
+                    }`}>
+                      {l.estado === "confirmado" ? <CheckCircle className="h-5 w-5" /> : <FileSpreadsheet className="h-5 w-5" />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-slate-800">{l.referencia}</p>
@@ -334,13 +375,20 @@ export default function CargaMasivaPage() {
                       {l.total_estimado && (
                         <div className="text-right">
                           <p className="font-semibold text-slate-800">{fmtBs(l.total_estimado)}</p>
-                          <p className="text-xs text-slate-400">total</p>
+                          <p className="text-xs text-slate-400">total ingresado</p>
                         </div>
                       )}
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${l.estado === "activo" ? "bg-teal-100 text-teal-700" : l.estado === "confirmado" ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        l.estado === "activo" ? "bg-teal-100 text-teal-700" :
+                        l.estado === "confirmado" ? "bg-green-100 text-green-700" :
+                        "bg-slate-100 text-slate-500"
+                      }`}>
                         {l.estado}
                       </span>
-                      <ChevronRight className="h-4 w-4 text-slate-300" />
+                      {l.estado === "confirmado"
+                        ? <Eye className="h-4 w-4 text-green-400" />
+                        : <ChevronRight className="h-4 w-4 text-slate-300" />
+                      }
                     </div>
                   </button>
                   <button onClick={() => handleEliminarLote(l)} className="rounded p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50">
@@ -353,11 +401,103 @@ export default function CargaMasivaPage() {
         </div>
       )}
 
-      {/* Editor del lote activo */}
-      {loteActivo && (
+      {/* ── Resumen lote confirmado (solo lectura) ── */}
+      {loteActivo && loteActivo.estado === "confirmado" && (
         <div className="space-y-4">
+          {/* Header */}
+          <div className="rounded-xl border border-green-200 bg-white shadow-sm px-5 py-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <button onClick={() => { setLoteActivo(null); setFilas([]); }} className="text-xs text-indigo-600 hover:underline">
+                ← Lotes
+              </button>
+              <span className="text-slate-300">/</span>
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-green-600">
+                  <CheckCircle className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-800">{loteActivo.referencia}</p>
+                  <p className="text-xs text-slate-400">
+                    {loteActivo.proveedor_nombre ?? "Sin proveedor"} · {loteActivo.fecha}
+                  </p>
+                </div>
+              </div>
+              <span className="ml-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">Confirmado</span>
+              <div className="ml-auto flex items-center gap-6 text-sm">
+                <div className="text-right">
+                  <p className="text-lg font-bold text-slate-800">{loteActivo.productos_count}</p>
+                  <p className="text-xs text-slate-400">productos ingresados</p>
+                </div>
+                {loteActivo.total_estimado && (
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-teal-700">{fmtBs(loteActivo.total_estimado)}</p>
+                    <p className="text-xs text-slate-400">total del lote</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Tabla de items del lote */}
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="border-b border-slate-100 px-5 py-3">
+              <p className="text-sm font-semibold text-slate-700">Productos ingresados en este lote</p>
+            </div>
+            {(!loteActivo.items || loteActivo.items.length === 0) ? (
+              <div className="flex flex-col items-center justify-center py-10 text-slate-300">
+                <FileSpreadsheet className="h-8 w-8 mb-2" />
+                <p className="text-sm">No hay detalle de ítems disponible</p>
+              </div>
+            ) : (
+              <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 320px)" }}>
+                <table className="border-collapse text-[11px]" style={{ minWidth: "max-content", width: "100%" }}>
+                  <thead className="sticky top-0 z-10">
+                    <tr>
+                      {["#", "CANTIDAD", "STOCK MÍN.", "CÓDIGO MARCA", "CÓDIGO UNIVERSAL", "DESCRIPCIÓN", "MARCA", "PROCEDENCIA",
+                        "COSTO COMPRA UNIT.", "COSTO COMPRA CAJA", "PRECIO FACTURA", "PRECIO POR MAYOR", "PRECIO TALLER", "PRECIO MAYORISTA",
+                        "CATEGORÍA", "INDUSTRIA", "MOTOR", "MODELO", "MEDIDA", "PROVEEDOR"].map(h => (
+                        <th key={h} className="border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px]">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loteActivo.items.map((item: any, idx: number) => (
+                      <tr key={item.id ?? idx} className={idx % 2 === 0 ? "bg-white" : "bg-amber-50/40"}>
+                        <td className="border border-slate-200 px-2 py-1.5 text-center text-slate-400">{idx + 1}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-center font-mono font-bold text-teal-700">{parseFloat(item.cantidad ?? 0).toFixed(0)}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-center font-mono text-slate-500">{parseFloat(item.stock_minimo ?? 0).toFixed(0)}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 font-mono text-indigo-700 font-semibold whitespace-nowrap">{item.sku}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 font-mono text-slate-500 whitespace-nowrap">{item.codigo_universal ?? "—"}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 font-semibold text-slate-800 max-w-[200px] truncate">{item.nombre}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-slate-600 whitespace-nowrap">{item.marca ?? "—"}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-slate-600 whitespace-nowrap">{item.procedencia ?? "—"}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 font-mono text-right text-slate-700 whitespace-nowrap">{item.precio_real ? fmtBs(item.precio_real) : "—"}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 font-mono text-right text-slate-500 whitespace-nowrap">{item.costo_caja ? fmtBs(item.costo_caja) : "—"}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 font-mono text-right font-semibold text-emerald-700 whitespace-nowrap">{item.precio_unitario ? fmtBs(item.precio_unitario) : "—"}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 font-mono text-right text-slate-700 whitespace-nowrap">{item.precio_mayor ? fmtBs(item.precio_mayor) : "—"}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 font-mono text-right text-slate-700 whitespace-nowrap">{item.precio_mecanico ? fmtBs(item.precio_mecanico) : "—"}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 font-mono text-right text-blue-700 whitespace-nowrap">{item.precio_mayorista ? fmtBs(item.precio_mayorista) : "—"}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-slate-600 whitespace-nowrap">{item.categoria ?? "—"}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-slate-600 whitespace-nowrap">{item.industria ?? "—"}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-slate-600 whitespace-nowrap">{item.motor ?? "—"}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-slate-500 max-w-[130px] truncate">{item.modelos ?? "—"}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-slate-500 whitespace-nowrap">{item.medidas ?? "—"}</td>
+                        <td className="border border-slate-200 px-2 py-1.5 text-slate-600 whitespace-nowrap">{item.proveedor ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Editor del lote activo */}
+      {loteActivo && loteActivo.estado !== "confirmado" && (
+        <div className="flex flex-col gap-3" style={{ height: "calc(100vh - 145px)" }}>
           {/* Header del lote */}
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm px-5 py-3">
+          <div className="shrink-0 rounded-xl border border-slate-200 bg-white shadow-sm px-5 py-3">
             <div className="flex flex-wrap items-center gap-3">
               <button onClick={() => { setLoteActivo(null); setFilas([]); setArchivoNombre(""); }} className="text-xs text-indigo-600 hover:underline">
                 ← Lotes
@@ -447,12 +587,12 @@ export default function CargaMasivaPage() {
           </div>
 
           {/* Tabla editable */}
-          <div className="overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm" style={{ maxHeight: "calc(100vh - 260px)" }}>
+          <div className="flex-1 min-h-0 overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
             <table className="w-full text-xs">
               <thead className="sticky top-0 z-10">
-                <tr className="border-b border-slate-100 bg-slate-50">
+                <tr>
                   {COLUMNAS.map((c) => (
-                    <th key={c} className="whitespace-nowrap bg-slate-50 px-3 py-2.5 text-left text-[10px] font-semibold tracking-wider text-slate-400">{c}</th>
+                    <th key={c} className="border border-amber-500 bg-amber-400 px-3 py-2 text-left font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px]">{c}</th>
                   ))}
                 </tr>
               </thead>
@@ -472,30 +612,30 @@ export default function CargaMasivaPage() {
                         </span>
                       </div>
                     </td>
-                    <CeldaEdit value={fila.sku}           onChange={(v) => updateFila(fila.id, "sku", v)}           placeholder="FLT-ACE-..." className="w-32 font-mono" />
-                    <CeldaEdit value={fila.nombre}        onChange={(v) => updateFila(fila.id, "nombre", v)}         placeholder="Nombre del producto" className="w-48" />
+                    <CeldaEdit value={fila.sku}              onChange={(v) => updateFila(fila.id, "sku", v)}              placeholder="FLT-ACE-001" className="w-32 font-mono" />
+                    <CeldaEdit value={fila.codigoUniversal} onChange={(v) => updateFila(fila.id, "codigoUniversal", v)} placeholder="90915-YZZD4" className="w-28 font-mono" />
+                    <CeldaEdit value={fila.nombre}           onChange={(v) => updateFila(fila.id, "nombre", v)}           placeholder="Nombre del producto" className="w-48" />
+                    <CeldaEdit value={fila.marca}            onChange={(v) => updateFila(fila.id, "marca", v)}            placeholder="Marca" className="w-24" />
+                    <CeldaEdit value={fila.procedencia}      onChange={(v) => updateFila(fila.id, "procedencia", v)}      placeholder="Japón, China..." className="w-24" />
+                    <CeldaEdit value={fila.precioReal}       onChange={(v) => updateFila(fila.id, "precioReal", v)}       placeholder="0.00" className="w-20" type="number" />
+                    <CeldaEdit value={fila.costoCaja}        onChange={(v) => updateFila(fila.id, "costoCaja", v)}        placeholder="0.00" className="w-20" type="number" />
+                    <CeldaEdit value={fila.precioUnitario}   onChange={(v) => updateFila(fila.id, "precioUnitario", v)}   placeholder="0.00" className="w-20" type="number" />
+                    <CeldaEdit value={fila.precioMayor}      onChange={(v) => updateFila(fila.id, "precioMayor", v)}      placeholder="0.00" className="w-20" type="number" />
+                    <CeldaEdit value={fila.precioMecanico}   onChange={(v) => updateFila(fila.id, "precioMecanico", v)}   placeholder="0.00" className="w-20" type="number" />
+                    <CeldaEdit value={fila.precioMayorista}  onChange={(v) => updateFila(fila.id, "precioMayorista", v)}  placeholder="0.00" className="w-20" type="number" />
                     <td className="px-2 py-1.5">
                       <select value={fila.categoria} onChange={(e) => updateFila(fila.id, "categoria", e.target.value)}
                         className="w-28 rounded border border-slate-200 px-1.5 py-1 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500">
                         {CATEGORIAS.map((c) => <option key={c}>{c}</option>)}
                       </select>
                     </td>
-                    <CeldaEdit value={fila.marca}          onChange={(v) => updateFila(fila.id, "marca", v)}          placeholder="Marca" className="w-28" />
-                    <CeldaEdit value={fila.precioReal}     onChange={(v) => updateFila(fila.id, "precioReal", v)}     placeholder="0.00" className="w-20" type="number" />
-                    <CeldaEdit value={fila.precioUnitario} onChange={(v) => updateFila(fila.id, "precioUnitario", v)} placeholder="0.00" className="w-20" type="number" />
-                    <CeldaEdit value={fila.precioMecanico} onChange={(v) => updateFila(fila.id, "precioMecanico", v)} placeholder="0.00" className="w-20" type="number" />
-                    <CeldaEdit value={fila.precioMayor}    onChange={(v) => updateFila(fila.id, "precioMayor", v)}    placeholder="0.00" className="w-20" type="number" />
-                    <CeldaEdit value={fila.cantidad}       onChange={(v) => updateFila(fila.id, "cantidad", v)}       placeholder="0" className="w-16" type="number" />
-                    <CeldaEdit value={fila.stockMin}       onChange={(v) => updateFila(fila.id, "stockMin", v)}       placeholder="5" className="w-16" type="number" />
-                    <CeldaEdit value={fila.ubicacion}      onChange={(v) => updateFila(fila.id, "ubicacion", v)}      placeholder="Almacén A..." className="w-32" />
-                    <CeldaEdit value={fila.proveedor}      onChange={(v) => updateFila(fila.id, "proveedor", v)}      placeholder="Proveedor" className="w-36" />
-                    <CeldaEdit value={fila.aplicacion}     onChange={(v) => updateFila(fila.id, "aplicacion", v)}     placeholder="Motor 1.8L..." className="w-36" />
-                    <CeldaEdit value={fila.medidas}        onChange={(v) => updateFila(fila.id, "medidas", v)}        placeholder="Ø65mm H:75" className="w-28" />
-                    <CeldaEdit value={fila.peso}           onChange={(v) => updateFila(fila.id, "peso", v)}           placeholder="0.00" className="w-20" type="number" />
-                    <CeldaEdit value={fila.modelos}        onChange={(v) => updateFila(fila.id, "modelos", v)}        placeholder="Corolla, Civic..." className="w-40" />
-                    <CeldaEdit value={fila.anioDesde}      onChange={(v) => updateFila(fila.id, "anioDesde", v)}      placeholder="2015" className="w-16" type="number" />
-                    <CeldaEdit value={fila.anioHasta}      onChange={(v) => updateFila(fila.id, "anioHasta", v)}      placeholder="2024" className="w-16" type="number" />
-                    <CeldaEdit value={fila.descripcion}    onChange={(v) => updateFila(fila.id, "descripcion", v)}    placeholder="Descripción del producto..." className="w-56" />
+                    <CeldaEdit value={fila.industria}   onChange={(v) => updateFila(fila.id, "industria", v)}   placeholder="Automotriz..." className="w-24" />
+                    <CeldaEdit value={fila.motor}       onChange={(v) => updateFila(fila.id, "motor", v)}       placeholder="4AGE, 2JZ..." className="w-24" />
+                    <CeldaEdit value={fila.modelos}     onChange={(v) => updateFila(fila.id, "modelos", v)}     placeholder="Corolla, Civic..." className="w-36" />
+                    <CeldaEdit value={fila.medidas}     onChange={(v) => updateFila(fila.id, "medidas", v)}     placeholder="Ø65mm H:75" className="w-24" />
+                    <CeldaEdit value={fila.proveedor}   onChange={(v) => updateFila(fila.id, "proveedor", v)}   placeholder="Proveedor" className="w-32" />
+                    <CeldaEdit value={fila.cantidad}    onChange={(v) => updateFila(fila.id, "cantidad", v)}    placeholder="0" className="w-16" type="number" />
+                    <CeldaEdit value={fila.stockMin}    onChange={(v) => updateFila(fila.id, "stockMin", v)}    placeholder="5" className="w-16" type="number" />
                     <td className="px-2 py-1.5">
                       <button onClick={() => eliminarFila(fila.id)} className="rounded p-1 text-slate-300 hover:text-red-500 hover:bg-red-50">
                         <Trash2 className="h-3.5 w-3.5" />
