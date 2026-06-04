@@ -82,10 +82,9 @@ class LotesRepository:
                     """
                     insert into public.lotes_items
                       (empresa_id, lote_id, producto_id, sku, nombre, categoria, marca,
-                       precio_real, precio_unitario, precio_mecanico, precio_mayor,
-                       cantidad, stock_minimo, ubicacion,
-                       proveedor, aplicacion, medidas, peso, modelos,
-                       anio_desde, anio_hasta, descripcion)
+                       precio_real, costo_caja, precio_unitario, precio_mayor, precio_mecanico, precio_mayorista,
+                       cantidad, stock_minimo,
+                       codigo_universal, procedencia, industria, motor, modelos, medidas, proveedor)
                     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
                     returning *
                     """,
@@ -95,21 +94,21 @@ class LotesRepository:
                     item["nombre"],
                     item.get("categoria"),
                     item.get("marca"),
-                    item.get("precio_real") or item.get("precioReal"),
-                    item.get("precio_unitario") or item.get("precioUnitario"),
-                    item.get("precio_mecanico") or item.get("precioMecanico"),
-                    item.get("precio_mayor") or item.get("precioMayor"),
+                    item.get("precio_real"),
+                    item.get("costo_caja"),
+                    item.get("precio_unitario"),
+                    item.get("precio_mayor"),
+                    item.get("precio_mecanico"),
+                    item.get("precio_mayorista"),
                     item.get("cantidad", 0),
-                    item.get("stock_minimo") or item.get("stockMin", 0),
-                    item.get("ubicacion", ""),
-                    item.get("proveedor", ""),
-                    item.get("aplicacion", ""),
-                    item.get("medidas", ""),
-                    item.get("peso"),
-                    item.get("modelos", ""),
-                    item.get("anio_desde") or item.get("anioDesde"),
-                    item.get("anio_hasta") or item.get("anioHasta"),
-                    item.get("descripcion", ""),
+                    item.get("stock_minimo", 0),
+                    item.get("codigo_universal"),
+                    item.get("procedencia"),
+                    item.get("industria"),
+                    item.get("motor"),
+                    item.get("modelos"),
+                    item.get("medidas"),
+                    item.get("proveedor"),
                 )
                 result.append(dict(row))
 

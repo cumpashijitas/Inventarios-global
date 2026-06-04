@@ -39,8 +39,16 @@ class ProductosRepository:
 
         if search and search.strip():
             params.append(f"%{search.strip().lower()}%")
+            n = len(params)
             where_clauses.append(
-                f"(lower(p.nombre) like ${len(params)} or lower(p.sku) like ${len(params)})"
+                f"(lower(p.nombre) like ${n} or lower(p.sku) like ${n}"
+                f" or lower(coalesce(p.codigo_universal,'')) like ${n}"
+                f" or lower(coalesce(p.marca,'')) like ${n}"
+                f" or lower(coalesce(p.procedencia,'')) like ${n}"
+                f" or lower(coalesce(p.motor,'')) like ${n}"
+                f" or lower(coalesce(p.modelos,'')) like ${n}"
+                f" or lower(coalesce(p.industria,'')) like ${n}"
+                f" or lower(coalesce(p.medidas,'')) like ${n})"
             )
 
         where = " and ".join(where_clauses)
@@ -59,6 +67,7 @@ class ProductosRepository:
                    p.stock_minimo, p.stock_maximo, p.controla_stock, p.activo,
                    p.imagen_url, p.marca, p.proveedor_id, p.aplicacion, p.medidas,
                    p.peso, p.modelos, p.anio_desde, p.anio_hasta, p.ubicacion,
+                   p.codigo_universal, p.procedencia, p.costo_caja, p.industria, p.motor, p.precio_real,
                    p.created_at, p.updated_at,
                    coalesce(s.stock_total, 0) as stock_total
               from public.productos p
@@ -83,6 +92,7 @@ class ProductosRepository:
                    stock_minimo, stock_maximo, controla_stock, activo,
                    imagen_url, metadatos, marca, proveedor_id, aplicacion, medidas,
                    peso, modelos, anio_desde, anio_hasta, ubicacion,
+                   codigo_universal, procedencia, costo_caja, industria, motor, precio_real,
                    created_at, updated_at
               from public.productos
              where id = $1 and deleted_at is null
@@ -107,18 +117,23 @@ class ProductosRepository:
                      unidad_id, precio_compra, precio_venta, precio_mecanico, precio_mayor,
                      stock_minimo, stock_maximo, controla_stock, imagen_url,
                      marca, proveedor_id, aplicacion, medidas, peso, modelos,
-                     anio_desde, anio_hasta, ubicacion, created_by, updated_by)
+                     anio_desde, anio_hasta, ubicacion,
+                     codigo_universal, procedencia, costo_caja, industria, motor, precio_real,
+                     created_by, updated_by)
                 values
                     ($1,$2,$3,$4,$5,$6,
                      $7,$8,$9,$10,$11,
                      $12,$13,$14,$15,
                      $16,$17,$18,$19,$20,$21,
-                     $22,$23,$24,$25,$25)
+                     $22,$23,$24,
+                     $25,$26,$27,$28,$29,$30,
+                     $31,$31)
                 returning id, sku, nombre, descripcion, categoria_id, unidad_id,
                           precio_compra, precio_venta, precio_mecanico, precio_mayor,
                           stock_minimo, stock_maximo, controla_stock, activo,
                           imagen_url, marca, proveedor_id, aplicacion, medidas,
                           peso, modelos, anio_desde, anio_hasta, ubicacion,
+                          codigo_universal, procedencia, costo_caja, industria, motor, precio_real,
                           created_at, updated_at
                 """,
                 empresa_id,
@@ -145,6 +160,12 @@ class ProductosRepository:
                 data.get("anio_desde"),
                 data.get("anio_hasta"),
                 data.get("ubicacion"),
+                data.get("codigo_universal"),
+                data.get("procedencia"),
+                data.get("costo_caja"),
+                data.get("industria"),
+                data.get("motor"),
+                data.get("precio_real"),
                 user_id,
             )
         except asyncpg.UniqueViolationError as e:
@@ -160,6 +181,7 @@ class ProductosRepository:
             "precio_mecanico", "precio_mayor", "marca", "proveedor_id",
             "aplicacion", "medidas", "peso", "modelos", "anio_desde",
             "anio_hasta", "ubicacion",
+            "codigo_universal", "procedencia", "costo_caja", "industria", "motor", "precio_real",
         }
         for k, v in patch.items():
             if v is None and k not in _nullable_cols:
@@ -171,7 +193,8 @@ class ProductosRepository:
         _nullable = {"descripcion", "stock_maximo", "imagen_url", "categoria_id",
                      "precio_mecanico", "precio_mayor", "marca", "proveedor_id",
                      "aplicacion", "medidas", "peso", "modelos", "anio_desde",
-                     "anio_hasta", "ubicacion"}
+                     "anio_hasta", "ubicacion",
+                     "codigo_universal", "procedencia", "costo_caja", "industria", "motor", "precio_real"}
         if not sets:
             return await self.get(producto_id)
         params.append(user_id)
@@ -189,6 +212,7 @@ class ProductosRepository:
                       stock_minimo, stock_maximo, controla_stock, activo,
                       imagen_url, marca, proveedor_id, aplicacion, medidas,
                       peso, modelos, anio_desde, anio_hasta, ubicacion,
+                      codigo_universal, procedencia, costo_caja, industria, motor, precio_real,
                       created_at, updated_at
             """,
             *params,
@@ -196,6 +220,34 @@ class ProductosRepository:
         if row is None:
             raise NotFoundError(f"producto {producto_id} no encontrado")
         return dict(row)
+
+    async def list_stock_bajo(self, empresa_id: UUID) -> list[dict[str, Any]]:
+        rows = await self.conn.fetch(
+            """
+            select p.id, p.sku, p.nombre, p.marca,
+                   c.nombre              as categoria,
+                   pv.razon_social       as proveedor,
+                   coalesce(s.stock_total, 0)              as stock_actual,
+                   p.stock_minimo,
+                   p.stock_minimo - coalesce(s.stock_total, 0) as diferencia
+              from public.productos p
+              left join public.categorias  c  on c.id  = p.categoria_id
+              left join public.proveedores pv on pv.id = p.proveedor_id
+              left join (
+                select producto_id, sum(cantidad) as stock_total
+                  from public.stock_actual
+                 group by producto_id
+              ) s on s.producto_id = p.id
+             where p.empresa_id = $1
+               and p.deleted_at is null
+               and p.activo = true
+               and p.controla_stock = true
+               and coalesce(s.stock_total, 0) < p.stock_minimo
+             order by (p.stock_minimo - coalesce(s.stock_total, 0)) desc
+            """,
+            empresa_id,
+        )
+        return [dict(r) for r in rows]
 
     async def soft_delete(self, producto_id: UUID, user_id: UUID | None) -> None:
         result = await self.conn.execute(

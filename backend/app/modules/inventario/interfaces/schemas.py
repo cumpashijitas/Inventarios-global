@@ -60,6 +60,12 @@ class ProductoIn(BaseModel):
     anio_desde: int | None = Field(default=None, ge=1900, le=2100)
     anio_hasta: int | None = Field(default=None, ge=1900, le=2100)
     ubicacion: str | None = None
+    codigo_universal: str | None = None
+    procedencia: str | None = None
+    costo_caja: Decimal | None = Field(default=None, ge=0)
+    industria: str | None = None
+    motor: str | None = None
+    precio_real: Decimal | None = Field(default=None, ge=0)
 
 
 class ProductoUpdate(BaseModel):
@@ -83,6 +89,12 @@ class ProductoUpdate(BaseModel):
     anio_desde: int | None = None
     anio_hasta: int | None = None
     ubicacion: str | None = None
+    codigo_universal: str | None = None
+    procedencia: str | None = None
+    costo_caja: Decimal | None = Field(default=None, ge=0)
+    industria: str | None = None
+    motor: str | None = None
+    precio_real: Decimal | None = Field(default=None, ge=0)
 
 
 class ProductoOut(BaseModel):
@@ -111,6 +123,12 @@ class ProductoOut(BaseModel):
     anio_desde: int | None = None
     anio_hasta: int | None = None
     ubicacion: str | None = None
+    codigo_universal: str | None = None
+    procedencia: str | None = None
+    costo_caja: Decimal | None = None
+    industria: str | None = None
+    motor: str | None = None
+    precio_real: Decimal | None = None
     stock_total: Decimal | None = None   # calculado por JOIN con stock_actual
     created_at: datetime
     updated_at: datetime

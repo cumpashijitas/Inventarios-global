@@ -14,35 +14,39 @@ class LoteItemIn(BaseModel):
     nombre: str = Field(min_length=1, max_length=200)
     categoria: str | None = None
     marca: str | None = None
-    precio_real: Decimal | None = Field(default=None, ge=0)
-    precio_unitario: Decimal | None = Field(default=None, ge=0)
-    precio_mecanico: Decimal | None = Field(default=None, ge=0)
-    precio_mayor: Decimal | None = Field(default=None, ge=0)
+    # Precios — misma nomenclatura que tabla productos
+    precio_real: Decimal | None = Field(default=None, ge=0)      # COSTO COMPRA UNITARIO → precio_compra
+    costo_caja: Decimal | None = Field(default=None, ge=0)        # COSTO COMPRA CAJA
+    precio_unitario: Decimal | None = Field(default=None, ge=0)   # PRECIO FACTURA → precio_venta
+    precio_mayor: Decimal | None = Field(default=None, ge=0)      # PRECIO POR MAYOR
+    precio_mecanico: Decimal | None = Field(default=None, ge=0)   # PRECIO TALLER
+    precio_mayorista: Decimal | None = Field(default=None, ge=0)  # PRECIO MAYORISTA → precio_real
+    # Stock
     cantidad: Decimal = Field(default=Decimal("0"), ge=0)
     stock_minimo: Decimal = Field(default=Decimal("0"), ge=0)
-    ubicacion: str | None = None
-    # Campos extendidos
-    proveedor: str | None = None
-    aplicacion: str | None = None
-    medidas: str | None = None
-    peso: Decimal | None = Field(default=None, ge=0)
+    # Campos descriptivos — mismos que inventario
+    codigo_universal: str | None = None
+    procedencia: str | None = None
+    industria: str | None = None
+    motor: str | None = None
     modelos: str | None = None
-    anio_desde: int | None = Field(default=None, ge=1900, le=2100)
-    anio_hasta: int | None = Field(default=None, ge=1900, le=2100)
-    descripcion: str | None = None
+    medidas: str | None = None
+    proveedor: str | None = None
 
     @field_validator("cantidad", "stock_minimo", mode="before")
     @classmethod
     def _coerce_decimal_zero(cls, v: object) -> object:
-        """Convierte None o string vacío a 0 en lugar de fallar."""
         if v is None or (isinstance(v, str) and not v.strip()):
             return Decimal("0")
         return v
 
-    @field_validator("precio_real", "precio_unitario", "precio_mecanico", "precio_mayor", "peso", mode="before")
+    @field_validator(
+        "precio_real", "costo_caja", "precio_unitario", "precio_mayor",
+        "precio_mecanico", "precio_mayorista",
+        mode="before",
+    )
     @classmethod
     def _coerce_decimal_none(cls, v: object) -> object:
-        """Convierte string vacío a None en campos de precio opcionales."""
         if isinstance(v, str) and not v.strip():
             return None
         return v
@@ -58,20 +62,20 @@ class LoteItemOut(BaseModel):
     categoria: str | None = None
     marca: str | None = None
     precio_real: Decimal | None = None
+    costo_caja: Decimal | None = None
     precio_unitario: Decimal | None = None
-    precio_mecanico: Decimal | None = None
     precio_mayor: Decimal | None = None
+    precio_mecanico: Decimal | None = None
+    precio_mayorista: Decimal | None = None
     cantidad: Decimal
     stock_minimo: Decimal
-    ubicacion: str | None = None
-    proveedor: str | None = None
-    aplicacion: str | None = None
-    medidas: str | None = None
-    peso: Decimal | None = None
+    codigo_universal: str | None = None
+    procedencia: str | None = None
+    industria: str | None = None
+    motor: str | None = None
     modelos: str | None = None
-    anio_desde: int | None = None
-    anio_hasta: int | None = None
-    descripcion: str | None = None
+    medidas: str | None = None
+    proveedor: str | None = None
     procesado: bool
 
 

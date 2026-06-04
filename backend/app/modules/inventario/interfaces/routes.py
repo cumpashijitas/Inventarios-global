@@ -62,6 +62,16 @@ async def listar_productos(
     return PageOut(**result)
 
 
+@router.get("/productos/stock-bajo", response_model=list[dict])
+async def listar_stock_bajo(
+    ctx: TenantContext = Depends(get_tenant_context),
+) -> list[dict]:
+    from app.modules.inventario.infrastructure.productos_repo import ProductosRepository
+    async with acquire_tenant_conn(ctx.empresa_id, ctx.user_id) as conn:
+        repo = ProductosRepository(conn)
+        return await repo.list_stock_bajo(UUID(ctx.empresa_id))
+
+
 @router.get("/productos/{producto_id}", response_model=ProductoOut)
 async def obtener_producto(
     producto_id: UUID,
