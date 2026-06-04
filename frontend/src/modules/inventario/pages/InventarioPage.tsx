@@ -111,25 +111,46 @@ export default function InventarioPage() {
   // ── Carga inicial ─────────────────────────────────────────────────────────
   const exportarCSV = () => {
     const headers = [
+      "CANTIDAD", "STOCK MÍNIMO", "UNIDAD",
       "CÓDIGO MARCA", "CÓDIGO UNIVERSAL", "DESCRIPCIÓN", "MARCA", "PROCEDENCIA",
-      "COSTO COMPRA UNITARIO", "COSTO COMPRA CAJA", "PRECIO FACTURA", "PRECIO POR MAYOR",
-      "PRECIO TALLER", "PRECIO MAYORISTA", "CATEGORÍA", "INDUSTRIA", "MOTOR",
-      "MODELO", "MEDIDA", "PROVEEDOR", "CANTIDAD", "STOCK MÍNIMO", "UNIDAD",
+      "COSTO COMPRA UNITARIO", "COSTO COMPRA CAJA",
+      "PRECIO FACTURA", "PRECIO POR MAYOR", "PRECIO TALLER", "PRECIO MAYORISTA",
+      "CATEGORÍA", "INDUSTRIA", "MOTOR", "MODELO", "MEDIDA", "PROVEEDOR",
     ];
-    const escape = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    // Strings siempre entre comillas (maneja comas y caracteres especiales)
+    const str = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    // Números sin comillas para que Excel los reconozca como valores numéricos
+    const num = (v: unknown) => {
+      const n = parseFloat(String(v ?? ""));
+      return isNaN(n) ? "" : String(n);
+    };
+
+    const SEP = ";";
     const rows = filtroProd.map(p => [
-      p.sku, p.codigo_universal ?? "",
-      p.nombre, p.marca ?? "", p.procedencia ?? "",
-      p.precio_compra, p.costo_caja ?? "",
-      p.precio_venta, p.precio_mayor ?? "", p.precio_mecanico ?? "", p.precio_real ?? "",
-      categorias.find(c => c.id === p.categoria_id)?.nombre ?? "",
-      p.industria ?? "", p.motor ?? "", p.modelos ?? "", p.medidas ?? "",
-      proveedores.find(pv => pv.id === p.proveedor_id)?.razon_social ?? "",
       Math.round(Number(p.stock_total ?? 0)),
       Math.round(parseFloat(p.stock_minimo)),
-      unidades.find(u => u.id === p.unidad_id)?.codigo ?? "",
-    ].map(escape).join(","));
-    const csv = "﻿" + [headers.map(escape).join(","), ...rows].join("\r\n");
+      str(unidades.find(u => u.id === p.unidad_id)?.codigo ?? ""),
+      str(p.sku),
+      str(p.codigo_universal ?? ""),
+      str(p.nombre),
+      str(p.marca ?? ""),
+      str(p.procedencia ?? ""),
+      num(p.precio_compra),
+      num(p.costo_caja),
+      num(p.precio_venta),
+      num(p.precio_mayor),
+      num(p.precio_mecanico),
+      num(p.precio_real),
+      str(categorias.find(c => c.id === p.categoria_id)?.nombre ?? ""),
+      str(p.industria ?? ""),
+      str(p.motor ?? ""),
+      str(p.modelos ?? ""),
+      str(p.medidas ?? ""),
+      str(proveedores.find(pv => pv.id === p.proveedor_id)?.razon_social ?? ""),
+    ].join(SEP));
+
+    // sep= le dice a Excel qué separador usar (necesario en locales en español)
+    const csv = "﻿" + `sep=${SEP}\r\n` + [headers.map(str).join(SEP), ...rows].join("\r\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
