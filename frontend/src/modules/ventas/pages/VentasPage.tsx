@@ -443,7 +443,7 @@ export default function VentasPage() {
       cargarVentas(),
       cargarCotizaciones(),
       ventasApi.topProductos(30, 5).then(setTopProductos).catch(console.error),
-      inventarioApi.listProductos({ page_size: 200, only_active: true }).then((r) => setProductos(r.items)).catch(console.error),
+      inventarioApi.listProductos({ page_size: 60, only_active: true }).then((r) => setProductos(r.items)).catch(console.error),
       inventarioApi.listClientes({ page_size: 200 }).then((r) => setClientes(r.items)),
       authApi.empresaPerfil().then(setEmpresa).catch(console.error),
     ]).finally(() => setLoading(false));
@@ -470,16 +470,22 @@ export default function VentasPage() {
       })
     : ventas;
 
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const r = await inventarioApi.listProductos({
+          search: busqueda.trim() || undefined,
+          only_active: true,
+          page_size: busqueda.trim() ? 100 : 60,
+        });
+        setProductos(r.items);
+      } catch (e) { console.error(e); }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [busqueda]);
+
   // ── Productos filtrados (siempre visibles) ─────────────────────────────────
-  const repFiltrados = busqueda.trim()
-    ? productos.filter((r) =>
-        r.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-        r.sku.toLowerCase().includes(busqueda.toLowerCase()) ||
-        (r.marca ?? "").toLowerCase().includes(busqueda.toLowerCase()) ||
-        (r.modelos ?? "").toLowerCase().includes(busqueda.toLowerCase()) ||
-        (r.medidas ?? "").toLowerCase().includes(busqueda.toLowerCase())
-      )
-    : productos.slice(0, 60); // Mostrar primeros 60 si no hay búsqueda
+  const repFiltrados = busqueda.trim() ? productos : productos.slice(0, 60);
 
   // ── Acciones de carrito ────────────────────────────────────────────────────
   const addToCart = (p: Producto) => {

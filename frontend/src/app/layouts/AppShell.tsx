@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronLeft,
   DollarSign,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -52,6 +53,11 @@ export function AppShell() {
   const { email, rol, logout, networkBlocked, setNetworkBlocked, lastActivity, updateActivity } = useAuthStore();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [networkChecked, setNetworkChecked] = useState(false);
+  const [pwModal, setPwModal] = useState(false);
+  const [pwForm, setPwForm] = useState({ nueva: "", confirmar: "" });
+  const [pwError, setPwError] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwOk, setPwOk] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
@@ -123,6 +129,23 @@ export function AppShell() {
   const handleLogout = () => {
     logout();
     navigate("/login");
+  };
+
+  const handleCambiarPassword = async () => {
+    setPwError("");
+    if (pwForm.nueva.length < 6) { setPwError("Mínimo 6 caracteres."); return; }
+    if (pwForm.nueva !== pwForm.confirmar) { setPwError("Las contraseñas no coinciden."); return; }
+    setPwSaving(true);
+    try {
+      await api.post("/auth/change-password", { new_password: pwForm.nueva });
+      setPwOk(true);
+      setPwForm({ nueva: "", confirmar: "" });
+      setTimeout(() => { setPwModal(false); setPwOk(false); }, 1800);
+    } catch {
+      setPwError("No se pudo cambiar la contraseña. Intentá de nuevo.");
+    } finally {
+      setPwSaving(false);
+    }
   };
 
   return (
@@ -215,7 +238,15 @@ export function AppShell() {
               </button>
 
               {userMenuOpen && (
-                <div className="absolute right-0 top-full z-50 mt-1.5 w-44 rounded-xl border border-slate-200 bg-white p-1 shadow-lg shadow-slate-200/60 dark:border-slate-700 dark:bg-slate-800 dark:shadow-slate-900/60">
+                <div className="absolute right-0 top-full z-50 mt-1.5 w-48 rounded-xl border border-slate-200 bg-white p-1 shadow-lg shadow-slate-200/60 dark:border-slate-700 dark:bg-slate-800 dark:shadow-slate-900/60">
+                  <button
+                    onClick={() => { setUserMenuOpen(false); setPwModal(true); }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    <KeyRound className="h-4 w-4" />
+                    Cambiar contraseña
+                  </button>
+                  <div className="my-1 border-t border-slate-100 dark:border-slate-700" />
                   <button
                     onClick={handleLogout}
                     className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-red-50 hover:text-red-600 dark:text-slate-300 dark:hover:bg-red-950/40 dark:hover:text-red-400"
@@ -228,6 +259,71 @@ export function AppShell() {
             </div>
           </div>
         </header>
+
+        {/* Modal cambiar contraseña */}
+        {pwModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+            <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                  <KeyRound className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Cambiar contraseña</p>
+                  <p className="text-xs text-slate-400">Mínimo 6 caracteres</p>
+                </div>
+              </div>
+
+              {pwOk ? (
+                <div className="flex flex-col items-center gap-2 py-4 text-center">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 text-green-600 text-lg">✓</div>
+                  <p className="text-sm font-medium text-green-700">¡Contraseña actualizada!</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">Nueva contraseña</label>
+                    <input
+                      type="password"
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                      value={pwForm.nueva}
+                      onChange={(e) => setPwForm((f) => ({ ...f, nueva: e.target.value }))}
+                      placeholder="••••••••"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">Confirmar contraseña</label>
+                    <input
+                      type="password"
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                      value={pwForm.confirmar}
+                      onChange={(e) => setPwForm((f) => ({ ...f, confirmar: e.target.value }))}
+                      placeholder="••••••••"
+                      onKeyDown={(e) => e.key === "Enter" && handleCambiarPassword()}
+                    />
+                  </div>
+                  {pwError && <p className="text-xs text-red-500">{pwError}</p>}
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => { setPwModal(false); setPwForm({ nueva: "", confirmar: "" }); setPwError(""); }}
+                      className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleCambiarPassword}
+                      disabled={pwSaving}
+                      className="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+                    >
+                      {pwSaving ? "Guardando…" : "Guardar"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto">
