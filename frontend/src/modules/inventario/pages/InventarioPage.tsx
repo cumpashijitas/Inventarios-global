@@ -83,6 +83,18 @@ export default function InventarioPage() {
   // Estado de selección de filas (para selección múltiple)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // Estado de paginación
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
+  const [totalProductos, setTotalProductos] = useState(0);
+
+  // Estadísticas globales (todos los productos, no solo los paginados)
+  const [stats, setStats] = useState({
+    stockBajo: 0,
+    stockCritico: 0,
+    inactivos: 0
+  });
+
   // Estado modales ver / clonar
   const [verModal, setVerModal]         = useState<{ open: boolean; item: Producto | null }>({ open: false, item: null });
   const [clonarModal, setClonarModal]   = useState<{ open: boolean; item: Producto | null }>({ open: false, item: null });
@@ -163,9 +175,26 @@ export default function InventarioPage() {
     URL.revokeObjectURL(url);
   };
 
-  const cargarProductos = async (search?: string) => {
-    const r = await inventarioApi.listProductos({ page_size: 200, search });
+  const cargarProductos = async (search?: string, pg?: number) => {
+    const r = await inventarioApi.listProductos({ page: pg ?? page, page_size: pageSize, search });
     setProductos(r.items);
+    setTotalProductos(r.total);
+  };
+
+  const cargarEstadisticas = async () => {
+    // Cargar TODOS los productos para las estadísticas (sin paginación)
+    const r = await inventarioApi.listProductos({ page: 1, page_size: 9999 });
+    const todosProductos = r.items;
+
+    const stockBajo = todosProductos.filter((p) => {
+      const s = Number(p.stock_total ?? 0);
+      return s > 0 && s < parseFloat(p.stock_minimo);
+    }).length;
+
+    const stockCritico = todosProductos.filter((p) => Number(p.stock_total ?? 0) === 0).length;
+    const inactivos = todosProductos.filter((p) => !p.activo).length;
+
+    setStats({ stockBajo, stockCritico, inactivos });
   };
   const cargarProveedores = async () => {
     const r = await inventarioApi.listProveedores({ page_size: 200 });
@@ -184,6 +213,7 @@ export default function InventarioPage() {
   useEffect(() => {
     Promise.all([
       cargarProductos(),
+      cargarEstadisticas(), // Cargar estadísticas de TODOS los productos
       cargarProveedores(),
       cargarClientes(),
       cargarCategorias(),
@@ -193,19 +223,22 @@ export default function InventarioPage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const timer = setTimeout(() => cargarProductos(busqueda || undefined), 300);
+    const timer = setTimeout(() => {
+      setPage(1); // resetear a página 1 cuando busca
+      cargarProductos(busqueda || undefined, 1);
+    }, 300);
     return () => clearTimeout(timer);
   }, [busqueda]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Stats ─────────────────────────────────────────────────────────────────
-  const stockBajo    = productos.filter((p) => { const s = Number(p.stock_total ?? 0); return s > 0 && s < parseFloat(p.stock_minimo); }).length;
-  const stockCritico = productos.filter((p) => Number(p.stock_total ?? 0) === 0).length;
-  const inactivos    = productos.filter((p) => !p.activo).length;
+  useEffect(() => {
+    if (!loading) cargarProductos(busqueda || undefined, page);
+  }, [page, pageSize]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Stats ─────────────────────────────────────────────────────────────────
   const STATS_BAR = [
-    { label: "Total Productos", value: productos.length,    sub: "",                      color: "text-slate-800" },
-    { label: "Stock Bajo",      value: stockBajo,           sub: "Requieren reposición",  color: "text-orange-500" },
-    { label: "Stock Crítico",   value: stockCritico,        sub: "Sin existencias",       color: "text-red-500" },
+    { label: "Total Productos", value: totalProductos,      sub: "",                      color: "text-slate-800" },
+    { label: "Stock Bajo",      value: stats.stockBajo,     sub: "Requieren reposición",  color: "text-orange-500" },
+    { label: "Stock Crítico",   value: stats.stockCritico,  sub: "Sin existencias",       color: "text-red-500" },
     { label: "Categorías",      value: categorias.filter(c => c.activo).length, sub: "", color: "text-violet-600" },
     { label: "Proveedores",     value: proveedores.length,  sub: "",                      color: "text-teal-600" },
     { label: "Clientes",        value: clientes.length,     sub: "",                      color: "text-indigo-600" },
@@ -224,6 +257,11 @@ export default function InventarioPage() {
   const filtroCat = categorias.filter((c) =>
     c.nombre.toLowerCase().includes(busqueda.toLowerCase()),
   );
+
+  // ── Paginación ────────────────────────────────────────────────────────────
+  const totalPages = Math.ceil(totalProductos / pageSize);
+  const hasPrevPage = page > 1;
+  const hasNextPage = page < totalPages;
 
   // ── Helpers de apertura de modales ───────────────────────────────────────
   const abrirNuevoProducto = () => {
@@ -363,7 +401,10 @@ export default function InventarioPage() {
           });
         }
       }
-      await cargarProductos(busqueda || undefined);
+      await Promise.all([
+        cargarProductos(busqueda || undefined),
+        cargarEstadisticas()
+      ]);
       setProductoModal({ open: false, item: null });
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
@@ -389,7 +430,10 @@ export default function InventarioPage() {
           motivo: `Stock inicial al clonar desde ${clonarModal.item?.nombre ?? ""}`,
         });
       }
-      await cargarProductos(busqueda || undefined);
+      await Promise.all([
+        cargarProductos(busqueda || undefined),
+        cargarEstadisticas()
+      ]);
       setClonarModal({ open: false, item: null });
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
@@ -457,7 +501,13 @@ export default function InventarioPage() {
     setSaving(true);
     try {
       await deleteModal.action();
-      await Promise.all([cargarProductos(busqueda || undefined), cargarProveedores(), cargarClientes(), cargarCategorias()]);
+      await Promise.all([
+        cargarProductos(busqueda || undefined),
+        cargarEstadisticas(),
+        cargarProveedores(),
+        cargarClientes(),
+        cargarCategorias()
+      ]);
       setDeleteModal({ open: false, nombre: "", action: null });
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
@@ -508,7 +558,10 @@ export default function InventarioPage() {
     setSaving(true);
     try {
       await Promise.all([...selectedIds].map((id) => inventarioApi.deleteProducto(id)));
-      await cargarProductos(busqueda || undefined);
+      await Promise.all([
+        cargarProductos(busqueda || undefined),
+        cargarEstadisticas()
+      ]);
       clearSelection();
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
@@ -551,37 +604,164 @@ export default function InventarioPage() {
         </div>
 
         {/* Toolbar */}
-        <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-5 py-3">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder={tab === "productos" ? "Buscar por código, descripción, marca, procedencia, motor, modelo, categoría, industria, medida, proveedor…" : tab === "proveedores" ? "Buscar por nombre o ciudad…" : tab === "clientes" ? "Buscar por nombre o NIT…" : "Buscar por nombre de categoría…"}
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-            />
+        <div className="border-b border-slate-100">
+          {/* Primera fila: búsqueda y botones */}
+          <div className="flex flex-wrap items-center gap-3 px-5 py-3">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder={tab === "productos" ? "Buscar por código, descripción, marca, procedencia, motor, modelo, categoría, industria, medida, proveedor…" : tab === "proveedores" ? "Buscar por nombre o ciudad…" : tab === "clientes" ? "Buscar por nombre o NIT…" : "Buscar por nombre de categoría…"}
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+              />
+            </div>
+            {/* Exportar CSV — solo en tab productos */}
+            {tab === "productos" && filtroProd.length > 0 && (
+              <Button
+                variant="outline"
+                onClick={exportarCSV}
+                className="gap-1.5 text-sm border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                title="Exportar inventario actual a Excel/CSV"
+              >
+                <Download className="h-4 w-4" />
+                Exportar Excel
+              </Button>
+            )}
+            {/* Botón Agregar: visible para todos en clientes, solo para quienes pueden editar en el resto */}
+            {(puedeEditar || tab === "clientes") && (
+              <Button
+                onClick={tab === "productos" ? abrirNuevoProducto : tab === "proveedores" ? abrirNuevoProveedor : tab === "clientes" ? abrirNuevoCliente : abrirNuevaCategoria}
+                className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm"
+              >
+                <Plus className="h-4 w-4" />
+                {tab === "productos" ? "Agregar Producto" : tab === "proveedores" ? "Agregar Proveedor" : tab === "clientes" ? "Agregar Cliente" : "Agregar Categoría"}
+              </Button>
+            )}
           </div>
-          {/* Exportar CSV — solo en tab productos */}
-          {tab === "productos" && filtroProd.length > 0 && (
-            <Button
-              variant="outline"
-              onClick={exportarCSV}
-              className="gap-1.5 text-sm border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-              title="Exportar inventario actual a Excel/CSV"
-            >
-              <Download className="h-4 w-4" />
-              Exportar Excel
-            </Button>
-          )}
-          {/* Botón Agregar: visible para todos en clientes, solo para quienes pueden editar en el resto */}
-          {(puedeEditar || tab === "clientes") && (
-            <Button
-              onClick={tab === "productos" ? abrirNuevoProducto : tab === "proveedores" ? abrirNuevoProveedor : tab === "clientes" ? abrirNuevoCliente : abrirNuevaCategoria}
-              className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm"
-            >
-              <Plus className="h-4 w-4" />
-              {tab === "productos" ? "Agregar Producto" : tab === "proveedores" ? "Agregar Proveedor" : tab === "clientes" ? "Agregar Cliente" : "Agregar Categoría"}
-            </Button>
+
+          {/* Segunda fila: PAGINACIÓN (solo en productos) */}
+          {tab === "productos" && totalProductos > 0 && (
+            <div className="bg-amber-50 px-5 py-2.5 flex items-center justify-between border-t border-amber-200">
+              <div className="flex items-center gap-3 text-sm text-slate-700">
+                <span className="font-semibold">Mostrando <span className="text-indigo-600">{productos.length}</span> de <span className="text-indigo-600">{totalProductos}</span> productos</span>
+                <div className="h-4 w-px bg-slate-300" />
+                <select
+                  className="rounded border border-slate-300 px-2 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={pageSize}
+                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                >
+                  <option value={25}>25 por página</option>
+                  <option value={50}>50 por página</option>
+                  <option value={100}>100 por página</option>
+                  <option value={200}>200 por página</option>
+                </select>
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!hasPrevPage}
+                    onClick={() => setPage(1)}
+                    className="text-xs h-7"
+                  >
+                    Primera
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!hasPrevPage}
+                    onClick={() => setPage(page - 1)}
+                    className="text-xs h-7"
+                  >
+                    ← Anterior
+                  </Button>
+
+                  {/* Números de página */}
+                  <div className="flex items-center gap-1">
+                    {(() => {
+                      const pages = [];
+                      const showPages = 5;
+                      let start = Math.max(1, page - Math.floor(showPages / 2));
+                      let end = Math.min(totalPages, start + showPages - 1);
+
+                      if (end === totalPages) {
+                        start = Math.max(1, end - showPages + 1);
+                      }
+
+                      if (start > 1) {
+                        pages.push(
+                          <button
+                            key={1}
+                            onClick={() => setPage(1)}
+                            className="w-7 h-7 rounded text-xs font-semibold text-slate-600 hover:bg-white"
+                          >
+                            1
+                          </button>
+                        );
+                        if (start > 2) {
+                          pages.push(<span key="dots1" className="text-slate-400 px-1">…</span>);
+                        }
+                      }
+
+                      for (let i = start; i <= end; i++) {
+                        pages.push(
+                          <button
+                            key={i}
+                            onClick={() => setPage(i)}
+                            className={`w-7 h-7 rounded text-xs font-semibold ${
+                              i === page
+                                ? "bg-indigo-600 text-white shadow-sm"
+                                : "text-slate-600 hover:bg-white"
+                            }`}
+                          >
+                            {i}
+                          </button>
+                        );
+                      }
+
+                      if (end < totalPages) {
+                        if (end < totalPages - 1) {
+                          pages.push(<span key="dots2" className="text-slate-400 px-1">…</span>);
+                        }
+                        pages.push(
+                          <button
+                            key={totalPages}
+                            onClick={() => setPage(totalPages)}
+                            className="w-7 h-7 rounded text-xs font-semibold text-slate-600 hover:bg-white"
+                          >
+                            {totalPages}
+                          </button>
+                        );
+                      }
+
+                      return pages;
+                    })()}
+                  </div>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!hasNextPage}
+                    onClick={() => setPage(page + 1)}
+                    className="text-xs h-7"
+                  >
+                    Siguiente →
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!hasNextPage}
+                    onClick={() => setPage(totalPages)}
+                    className="text-xs h-7"
+                  >
+                    Última
+                  </Button>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -640,17 +820,17 @@ export default function InventarioPage() {
                   <table className="border-collapse text-[11px]" style={{ minWidth: "max-content", width: "100%" }}>
                     <thead className="sticky top-0 z-30">
                       <tr>
-                        <th className="border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px] sticky left-0 z-40">
+                        <th className="border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px] sticky left-0 z-40 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
                           <input type="checkbox"
                             checked={selectedIds.size === filtroProd.length && filtroProd.length > 0}
                             onChange={toggleSelectAll}
                             className="h-3.5 w-3.5 rounded border-amber-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
                         </th>
-                        <th className="border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px] sticky left-[41px] z-40">FOTO</th>
+                        <th className="border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px] sticky left-[41px] z-40 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">FOTO</th>
                         {["CÓDIGO MARCA", "DESCRIPCIÓN", "CANTIDAD", "STOCK MÍNIMO", "UNIDAD", "CÓDIGO UNIVERSAL", "MARCA", "PROCEDENCIA",
                           "COSTO COMPRA UNITARIO", "COSTO COMPRA CAJA", "PRECIO FACTURA", "PRECIO POR MAYOR", "PRECIO TALLER", "PRECIO MAYORISTA",
                           "CATEGORÍA", "INDUSTRIA", "MODELO", "MEDIDA", "PROVEEDOR"].map((h, i) => (
-                          <th key={h} className={`border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px] ${i < 2 ? "sticky z-40" : ""}`}
+                          <th key={h} className={`border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px] ${i < 2 ? "sticky z-40 shadow-[2px_0_5px_rgba(0,0,0,0.1)]" : ""}`}
                             style={i === 0 ? { left: "101px" } : i === 1 ? { left: "221px" } : undefined}>{h}</th>
                         ))}
                       </tr>
@@ -668,12 +848,12 @@ export default function InventarioPage() {
                         return (
                           <tr key={p.id} className={`${rowBg} ${isSelected ? "bg-indigo-50 border-l-4 border-l-indigo-600" : ""} hover:bg-amber-100/60 ${!p.activo ? "opacity-50" : ""}`}>
                             {/* Checkbox fijo */}
-                            <td className={`border border-slate-200 px-2 py-1 text-center sticky left-0 z-20 ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>
+                            <td className={`border border-slate-200 px-2 py-1 text-center sticky left-0 z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>
                               <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(p.id)}
                                 className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
                             </td>
                             {/* Foto fija */}
-                            <td className={`border border-slate-200 px-1 py-1 sticky left-[41px] z-20 ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>
+                            <td className={`border border-slate-200 px-1 py-1 sticky left-[41px] z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>
                               <div className="w-12 h-12 rounded overflow-hidden bg-slate-100 flex items-center justify-center">
                                 {p.imagen_url ? (
                                   <img src={p.imagen_url} alt={p.nombre} className="w-full h-full object-cover" />
@@ -683,9 +863,9 @@ export default function InventarioPage() {
                               </div>
                             </td>
                             {/* Código marca fijo */}
-                            <td className={`border border-slate-200 px-2 py-1 font-mono text-indigo-700 font-semibold whitespace-nowrap sticky left-[101px] z-20 ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>{p.sku}</td>
+                            <td className={`border border-slate-200 px-2 py-1 font-mono text-indigo-700 font-semibold whitespace-nowrap sticky left-[101px] z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>{p.sku}</td>
                             {/* Descripción fija */}
-                            <td className={`border border-slate-200 px-2 py-1 max-w-[200px] sticky left-[221px] z-20 ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>
+                            <td className={`border border-slate-200 px-2 py-1 max-w-[200px] sticky left-[221px] z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>
                               <p className="font-semibold text-slate-800 truncate leading-tight">{p.nombre}</p>
                             </td>
                             {/* Resto de columnas scrolleables */}
@@ -716,17 +896,17 @@ export default function InventarioPage() {
                   <table className="border-collapse text-[11px]" style={{ minWidth: "max-content", width: "100%" }}>
                     <thead className="sticky top-0 z-30">
                       <tr>
-                        <th className="border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px] sticky left-0 z-40">
+                        <th className="border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px] sticky left-0 z-40 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
                           <input type="checkbox"
                             checked={selectedIds.size === filtroProd.length && filtroProd.length > 0}
                             onChange={toggleSelectAll}
                             className="h-3.5 w-3.5 rounded border-amber-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
                         </th>
-                        <th className="border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px] sticky left-[41px] z-40">FOTO</th>
+                        <th className="border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px] sticky left-[41px] z-40 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">FOTO</th>
                         {["CÓDIGO MARCA", "DESCRIPCIÓN", "CANTIDAD", "STOCK MÍNIMO", "CÓDIGO UNIVERSAL", "MARCA",
                           "PROCEDENCIA", "UNIDAD", "PRECIO FACTURA", "PRECIO POR MAYOR", "PRECIO TALLER", "PRECIO MAYORISTA",
                           "MOTOR", "MODELO", "UBICACIÓN"].map((h, i) => (
-                          <th key={h} className={`border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px] ${i < 2 ? "sticky z-40" : ""}`}
+                          <th key={h} className={`border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px] ${i < 2 ? "sticky z-40 shadow-[2px_0_5px_rgba(0,0,0,0.1)]" : ""}`}
                             style={i === 0 ? { left: "101px" } : i === 1 ? { left: "221px" } : undefined}>{h}</th>
                         ))}
                       </tr>
@@ -741,11 +921,11 @@ export default function InventarioPage() {
                         const isSelected = selectedIds.has(p.id);
                         return (
                           <tr key={p.id} className={`${rowBg} ${isSelected ? "bg-indigo-50 border-l-4 border-l-indigo-600" : ""} hover:bg-amber-100/60 ${!p.activo ? "opacity-50" : ""}`}>
-                            <td className={`border border-slate-200 px-2 py-1 text-center sticky left-0 z-20 ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>
+                            <td className={`border border-slate-200 px-2 py-1 text-center sticky left-0 z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>
                               <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(p.id)}
                                 className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
                             </td>
-                            <td className={`border border-slate-200 px-1 py-1 sticky left-[41px] z-20 ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>
+                            <td className={`border border-slate-200 px-1 py-1 sticky left-[41px] z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>
                               <div className="w-12 h-12 rounded overflow-hidden bg-slate-100 flex items-center justify-center">
                                 {p.imagen_url ? (
                                   <img src={p.imagen_url} alt={p.nombre} className="w-full h-full object-cover" />
@@ -754,8 +934,8 @@ export default function InventarioPage() {
                                 )}
                               </div>
                             </td>
-                            <td className={`border border-slate-200 px-2 py-1 font-mono text-indigo-700 font-semibold whitespace-nowrap sticky left-[101px] z-20 ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>{p.sku}</td>
-                            <td className={`border border-slate-200 px-2 py-1 max-w-[200px] sticky left-[221px] z-20 ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>
+                            <td className={`border border-slate-200 px-2 py-1 font-mono text-indigo-700 font-semibold whitespace-nowrap sticky left-[101px] z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>{p.sku}</td>
+                            <td className={`border border-slate-200 px-2 py-1 max-w-[200px] sticky left-[221px] z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>
                               <p className="font-semibold text-slate-800 truncate leading-tight">{p.nombre}</p>
                             </td>
                             <td className={`border border-slate-200 px-2 py-1 text-center font-mono ${stockColor}`}>{stockNum}</td>
@@ -778,6 +958,132 @@ export default function InventarioPage() {
                   </table>
                 )}
               </div>
+
+              {/* Controles de paginación */}
+              {totalProductos > 0 && (
+                <div className="border-t border-slate-200 bg-slate-50 px-5 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3 text-sm text-slate-600">
+                    <span>Mostrando <strong>{productos.length}</strong> de <strong>{totalProductos}</strong> productos</span>
+                    <div className="h-4 w-px bg-slate-300" />
+                    <select
+                      className="rounded border border-slate-300 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      value={pageSize}
+                      onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                    >
+                      <option value={25}>25 por página</option>
+                      <option value={50}>50 por página</option>
+                      <option value={100}>100 por página</option>
+                      <option value={200}>200 por página</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!hasPrevPage}
+                      onClick={() => setPage(1)}
+                      className="text-xs"
+                    >
+                      Primera
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!hasPrevPage}
+                      onClick={() => setPage(page - 1)}
+                      className="text-xs"
+                    >
+                      ← Anterior
+                    </Button>
+
+                    {/* Números de página */}
+                    <div className="flex items-center gap-1">
+                      {(() => {
+                        const pages = [];
+                        const showPages = 5; // cuántas páginas mostrar
+                        let start = Math.max(1, page - Math.floor(showPages / 2));
+                        let end = Math.min(totalPages, start + showPages - 1);
+
+                        // Ajustar start si end está en el límite
+                        if (end === totalPages) {
+                          start = Math.max(1, end - showPages + 1);
+                        }
+
+                        // Primera página con "..."
+                        if (start > 1) {
+                          pages.push(
+                            <button
+                              key={1}
+                              onClick={() => setPage(1)}
+                              className="w-8 h-8 rounded text-xs font-medium text-slate-600 hover:bg-slate-100"
+                            >
+                              1
+                            </button>
+                          );
+                          if (start > 2) {
+                            pages.push(<span key="dots1" className="text-slate-400 px-1">…</span>);
+                          }
+                        }
+
+                        // Páginas visibles
+                        for (let i = start; i <= end; i++) {
+                          pages.push(
+                            <button
+                              key={i}
+                              onClick={() => setPage(i)}
+                              className={`w-8 h-8 rounded text-xs font-medium ${
+                                i === page
+                                  ? "bg-indigo-600 text-white"
+                                  : "text-slate-600 hover:bg-slate-100"
+                              }`}
+                            >
+                              {i}
+                            </button>
+                          );
+                        }
+
+                        // Última página con "..."
+                        if (end < totalPages) {
+                          if (end < totalPages - 1) {
+                            pages.push(<span key="dots2" className="text-slate-400 px-1">…</span>);
+                          }
+                          pages.push(
+                            <button
+                              key={totalPages}
+                              onClick={() => setPage(totalPages)}
+                              className="w-8 h-8 rounded text-xs font-medium text-slate-600 hover:bg-slate-100"
+                            >
+                              {totalPages}
+                            </button>
+                          );
+                        }
+
+                        return pages;
+                      })()}
+                    </div>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!hasNextPage}
+                      onClick={() => setPage(page + 1)}
+                      className="text-xs"
+                    >
+                      Siguiente →
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!hasNextPage}
+                      onClick={() => setPage(totalPages)}
+                      className="text-xs"
+                    >
+                      Última
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )
         )}
