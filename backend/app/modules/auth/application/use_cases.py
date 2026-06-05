@@ -136,6 +136,9 @@ class AuthUseCases:
             rol=row["rol"],
         )
 
+    async def change_password(self, user_id: str, new_password: str) -> None:
+        await self.supabase.admin_update_password(user_id, new_password)
+
     async def logout(self, _access_token: str) -> None:
         # Como el JWT es self-contained y stateless, "logout" es responsabilidad
         # del frontend (descartar el token). Si querés revocación real, agrega

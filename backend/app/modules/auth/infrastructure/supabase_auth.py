@@ -98,6 +98,23 @@ class SupabaseAuthAdapter:
         r.raise_for_status()
         return r.json()["id"]
 
+    async def admin_update_password(self, auth_user_id: str, new_password: str) -> None:
+        if not self._service_key:
+            raise ValueError("SUPABASE_SERVICE_ROLE_KEY no está configurado")
+        admin_headers = {
+            "apikey": self._service_key,
+            "Authorization": f"Bearer {self._service_key}",
+            "Content-Type": "application/json",
+        }
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.put(
+                f"{self._base}/admin/users/{auth_user_id}",
+                json={"password": new_password},
+                headers=admin_headers,
+            )
+        if r.status_code not in (200, 204):
+            raise UnauthorizedError("No se pudo cambiar la contraseña")
+
     async def delete_user(self, auth_user_id: str) -> None:
         """Elimina un usuario de Supabase Auth (irreversible). Usar con cuidado."""
         if not self._service_key:

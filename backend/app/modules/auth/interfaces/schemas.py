@@ -33,6 +33,10 @@ class EmpresaResumen(BaseModel):
     rol: str
 
 
+class ChangePasswordRequest(BaseModel):
+    new_password: str = Field(min_length=6)
+
+
 class LoginResponse(BaseModel):
     """Respuesta del login.
 

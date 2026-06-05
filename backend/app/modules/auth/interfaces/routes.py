@@ -8,6 +8,7 @@ from app.core.deps import get_jwt_claims
 from app.core.security import JWTClaims
 from app.modules.auth.application.use_cases import AuthUseCases, get_auth_use_cases
 from app.modules.auth.interfaces.schemas import (
+    ChangePasswordRequest,
     LoginRequest,
     LoginResponse,
     RefreshRequest,
@@ -48,6 +49,15 @@ async def refresh(
 ) -> TokenResponse:
     result = await uc.refresh(body.refresh_token)
     return TokenResponse(**result)
+
+
+@router.post("/change-password", status_code=204)
+async def change_password(
+    body: ChangePasswordRequest,
+    claims: JWTClaims = Depends(get_jwt_claims),
+    uc: AuthUseCases = Depends(get_auth_use_cases),
+) -> None:
+    await uc.change_password(claims.sub, body.new_password)
 
 
 @router.post("/logout", status_code=204)
