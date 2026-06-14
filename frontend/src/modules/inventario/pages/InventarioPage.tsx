@@ -89,13 +89,6 @@ export default function InventarioPage() {
   const [pageSize, setPageSize] = useState(100);
   const [totalProductos, setTotalProductos] = useState(0);
 
-  // Estadísticas globales (todos los productos, no solo los paginados)
-  const [stats, setStats] = useState({
-    stockBajo: 0,
-    stockCritico: 0,
-    inactivos: 0
-  });
-
   // Estado modales ver / clonar
   const [verModal, setVerModal]         = useState<{ open: boolean; item: Producto | null }>({ open: false, item: null });
   const [clonarModal, setClonarModal]   = useState<{ open: boolean; item: Producto | null }>({ open: false, item: null });
@@ -181,22 +174,6 @@ export default function InventarioPage() {
     setProductos(r.items);
     setTotalProductos(r.total);
   };
-
-  const cargarEstadisticas = async () => {
-    // Cargar TODOS los productos para las estadísticas (sin paginación)
-    const r = await inventarioApi.listProductos({ page: 1, page_size: 9999 });
-    const todosProductos = r.items;
-
-    const stockBajo = todosProductos.filter((p) => {
-      const s = Number(p.stock_total ?? 0);
-      return s > 0 && s < parseFloat(p.stock_minimo);
-    }).length;
-
-    const stockCritico = todosProductos.filter((p) => Number(p.stock_total ?? 0) === 0).length;
-    const inactivos = todosProductos.filter((p) => !p.activo).length;
-
-    setStats({ stockBajo, stockCritico, inactivos });
-  };
   const cargarProveedores = async () => {
     const r = await inventarioApi.listProveedores({ page_size: 200 });
     setProveedores(r.items);
@@ -214,7 +191,6 @@ export default function InventarioPage() {
   useEffect(() => {
     Promise.all([
       cargarProductos(),
-      cargarEstadisticas(), // Cargar estadísticas de TODOS los productos
       cargarProveedores(),
       cargarClientes(),
       cargarCategorias(),
@@ -238,8 +214,6 @@ export default function InventarioPage() {
   // ── Stats ─────────────────────────────────────────────────────────────────
   const STATS_BAR = [
     { label: "Total Productos", value: totalProductos,      sub: "",                      color: "text-slate-800" },
-    { label: "Stock Bajo",      value: stats.stockBajo,     sub: "Requieren reposición",  color: "text-orange-500" },
-    { label: "Stock Crítico",   value: stats.stockCritico,  sub: "Sin existencias",       color: "text-red-500" },
     { label: "Categorías",      value: categorias.filter(c => c.activo).length, sub: "", color: "text-violet-600" },
     { label: "Proveedores",     value: proveedores.length,  sub: "",                      color: "text-teal-600" },
     { label: "Clientes",        value: clientes.length,     sub: "",                      color: "text-indigo-600" },
@@ -405,7 +379,6 @@ export default function InventarioPage() {
           });
         }
         await cargarProductos(busqueda || undefined);
-        await cargarEstadisticas();
       }
 
       setProductoModal({ open: false, item: null });
@@ -438,7 +411,6 @@ export default function InventarioPage() {
         });
       }
       await cargarProductos(busqueda || undefined);
-      await cargarEstadisticas();
       setClonarModal({ open: false, item: null });
       toast.success("Producto clonado correctamente");
     } catch (err) {
@@ -526,7 +498,6 @@ export default function InventarioPage() {
       await deleteModal.action();
       await Promise.all([
         cargarProductos(busqueda || undefined),
-        cargarEstadisticas(),
         cargarProveedores(),
         cargarClientes(),
         cargarCategorias()
@@ -592,10 +563,7 @@ export default function InventarioPage() {
     try {
       const cantidad = selectedIds.size;
       await Promise.all([...selectedIds].map((id) => inventarioApi.deleteProducto(id)));
-      await Promise.all([
-        cargarProductos(busqueda || undefined),
-        cargarEstadisticas()
-      ]);
+      await cargarProductos(busqueda || undefined);
       clearSelection();
       toast.success(`${cantidad} producto${cantidad > 1 ? 's' : ''} eliminado${cantidad > 1 ? 's' : ''} correctamente`);
     } catch (err) {
