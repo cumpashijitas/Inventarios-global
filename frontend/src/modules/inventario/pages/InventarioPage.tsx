@@ -389,6 +389,7 @@ export default function InventarioPage() {
             motivo: "Ajuste manual desde formulario de producto",
           });
         }
+        await cargarProductos(busqueda || undefined);
       } else {
         if (!unidades.length) { toast.error("Crea al menos una unidad de medida primero."); return; }
         const nuevo = await inventarioApi.createProducto({ ...pForm, unidad_id: unidades[0].id } as ProductoIn);
@@ -403,12 +404,9 @@ export default function InventarioPage() {
             motivo: "Stock inicial al crear producto",
           });
         }
+        await cargarProductos(busqueda || undefined);
+        await cargarEstadisticas();
       }
-
-      await Promise.all([
-        cargarProductos(busqueda || undefined),
-        cargarEstadisticas()
-      ]);
 
       setProductoModal({ open: false, item: null });
       toast.success(esEdicion ? "Producto actualizado correctamente" : "Producto creado correctamente");
@@ -439,10 +437,8 @@ export default function InventarioPage() {
           motivo: `Stock inicial al clonar desde ${clonarModal.item?.nombre ?? ""}`,
         });
       }
-      await Promise.all([
-        cargarProductos(busqueda || undefined),
-        cargarEstadisticas()
-      ]);
+      await cargarProductos(busqueda || undefined);
+      await cargarEstadisticas();
       setClonarModal({ open: false, item: null });
       toast.success("Producto clonado correctamente");
     } catch (err) {
