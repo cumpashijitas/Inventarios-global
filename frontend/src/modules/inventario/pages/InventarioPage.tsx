@@ -4,6 +4,7 @@ import {
   Plus, Ruler, Search, ShieldCheck, Tag, Trash2, User, X, Check,
 } from "lucide-react";
 import React, { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { useAuthStore } from "@/shared/stores/auth.store";
 import { puedeAcceder } from "@/shared/config/roles";
 import { Button } from "@/shared/components/ui/button";
@@ -386,8 +387,9 @@ export default function InventarioPage() {
             motivo: "Ajuste manual desde formulario de producto",
           });
         }
+        toast.success("Producto actualizado correctamente");
       } else {
-        if (!unidades.length) { alert("Crea al menos una unidad de medida primero."); return; }
+        if (!unidades.length) { toast.error("Crea al menos una unidad de medida primero."); return; }
         const nuevo = await inventarioApi.createProducto({ ...pForm, unidad_id: unidades[0].id } as ProductoIn);
         // Registrar stock inicial si se indicó
         if (stockInicial > 0 && almacenes.length > 0) {
@@ -400,13 +402,17 @@ export default function InventarioPage() {
             motivo: "Stock inicial al crear producto",
           });
         }
+        toast.success("Producto creado correctamente");
       }
       await Promise.all([
         cargarProductos(busqueda || undefined),
         cargarEstadisticas()
       ]);
       setProductoModal({ open: false, item: null });
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      toast.error(productoModal.item ? "Error al actualizar el producto" : "Error al crear el producto");
+    }
     finally { setSaving(false); }
   };
 
@@ -415,7 +421,7 @@ export default function InventarioPage() {
     if (!clonarForm.sku?.trim()) return;
     setSaving(true);
     try {
-      if (!unidades.length) { alert("Crea al menos una unidad de medida primero."); return; }
+      if (!unidades.length) { toast.error("Crea al menos una unidad de medida primero."); return; }
       const nuevo = await inventarioApi.createProducto({
         ...clonarForm,
         unidad_id: clonarForm.unidad_id ?? unidades[0].id,
@@ -434,8 +440,12 @@ export default function InventarioPage() {
         cargarProductos(busqueda || undefined),
         cargarEstadisticas()
       ]);
+      toast.success("Producto clonado correctamente");
       setClonarModal({ open: false, item: null });
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error al clonar el producto");
+    }
     finally { setSaving(false); }
   };
 
@@ -452,8 +462,10 @@ export default function InventarioPage() {
       setImgPreview(imagen_url);
       setPForm((f) => ({ ...f, imagen_url }));
       await cargarProductos(busqueda || undefined);
+      toast.success("Imagen subida correctamente");
     } catch (err) {
       console.error("Error subiendo imagen:", err);
+      toast.error("Error al subir la imagen");
       setImgPreview(productoModal.item.imagen_url ?? null);
     } finally {
       setImgUploading(false);
@@ -467,12 +479,17 @@ export default function InventarioPage() {
     try {
       if (proveedorModal.item) {
         await inventarioApi.updateProveedor(proveedorModal.item.id, provForm);
+        toast.success("Proveedor actualizado correctamente");
       } else {
         await inventarioApi.createProveedor(provForm as ProveedorIn);
+        toast.success("Proveedor creado correctamente");
       }
       await cargarProveedores();
       setProveedorModal({ open: false, item: null });
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      toast.error(proveedorModal.item ? "Error al actualizar el proveedor" : "Error al crear el proveedor");
+    }
     finally { setSaving(false); }
   };
 
@@ -483,12 +500,17 @@ export default function InventarioPage() {
     try {
       if (clienteModal.item) {
         await inventarioApi.updateCliente(clienteModal.item.id, cliForm);
+        toast.success("Cliente actualizado correctamente");
       } else {
         await inventarioApi.createCliente({ nombre: "", tipo: "particular", ...cliForm } as ClienteIn);
+        toast.success("Cliente creado correctamente");
       }
       await cargarClientes();
       setClienteModal({ open: false, item: null });
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      toast.error(clienteModal.item ? "Error al actualizar el cliente" : "Error al crear el cliente");
+    }
     finally { setSaving(false); }
   };
 
@@ -508,8 +530,12 @@ export default function InventarioPage() {
         cargarClientes(),
         cargarCategorias()
       ]);
+      toast.success("Eliminado correctamente");
       setDeleteModal({ open: false, nombre: "", action: null });
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error al eliminar");
+    }
     finally { setSaving(false); }
   };
 
@@ -528,12 +554,17 @@ export default function InventarioPage() {
     try {
       if (categoriaModal.item) {
         await inventarioApi.updateCategoria(categoriaModal.item.id, catForm);
+        toast.success("Categoría actualizada correctamente");
       } else {
         await inventarioApi.createCategoria({ nombre: catForm.nombre, parent_id: catForm.parent_id ?? null, orden: catForm.orden ?? 0 });
+        toast.success("Categoría creada correctamente");
       }
       await cargarCategorias();
       setCategoriaModal({ open: false, item: null });
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      toast.error(categoriaModal.item ? "Error al actualizar la categoría" : "Error al crear la categoría");
+    }
     finally { setSaving(false); }
   };
 
@@ -562,8 +593,12 @@ export default function InventarioPage() {
         cargarProductos(busqueda || undefined),
         cargarEstadisticas()
       ]);
+      toast.success(`${selectedIds.size} producto${selectedIds.size > 1 ? 's' : ''} eliminado${selectedIds.size > 1 ? 's' : ''} correctamente`);
       clearSelection();
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error al eliminar los productos");
+    }
     finally { setSaving(false); }
   };
 
