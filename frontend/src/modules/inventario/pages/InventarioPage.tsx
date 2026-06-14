@@ -372,6 +372,8 @@ export default function InventarioPage() {
     if (!pForm.sku && !productoModal.item) return;
     setSaving(true);
     try {
+      const esEdicion = !!productoModal.item;
+
       if (productoModal.item) {
         await inventarioApi.updateProducto(productoModal.item.id, pForm);
         // Ajustar stock si el administrador lo cambió
@@ -387,7 +389,6 @@ export default function InventarioPage() {
             motivo: "Ajuste manual desde formulario de producto",
           });
         }
-        toast.success("Producto actualizado correctamente");
       } else {
         if (!unidades.length) { toast.error("Crea al menos una unidad de medida primero."); return; }
         const nuevo = await inventarioApi.createProducto({ ...pForm, unidad_id: unidades[0].id } as ProductoIn);
@@ -402,13 +403,15 @@ export default function InventarioPage() {
             motivo: "Stock inicial al crear producto",
           });
         }
-        toast.success("Producto creado correctamente");
       }
+
       await Promise.all([
         cargarProductos(busqueda || undefined),
         cargarEstadisticas()
       ]);
+
       setProductoModal({ open: false, item: null });
+      toast.success(esEdicion ? "Producto actualizado correctamente" : "Producto creado correctamente");
     } catch (err) {
       console.error(err);
       toast.error(productoModal.item ? "Error al actualizar el producto" : "Error al crear el producto");
@@ -440,8 +443,8 @@ export default function InventarioPage() {
         cargarProductos(busqueda || undefined),
         cargarEstadisticas()
       ]);
-      toast.success("Producto clonado correctamente");
       setClonarModal({ open: false, item: null });
+      toast.success("Producto clonado correctamente");
     } catch (err) {
       console.error(err);
       toast.error("Error al clonar el producto");
@@ -462,11 +465,11 @@ export default function InventarioPage() {
       setImgPreview(imagen_url);
       setPForm((f) => ({ ...f, imagen_url }));
       await cargarProductos(busqueda || undefined);
-      toast.success("Imagen subida correctamente");
+      toast.success("Imagen actualizada correctamente");
     } catch (err) {
       console.error("Error subiendo imagen:", err);
-      toast.error("Error al subir la imagen");
       setImgPreview(productoModal.item.imagen_url ?? null);
+      toast.error("Error al subir la imagen");
     } finally {
       setImgUploading(false);
     }
@@ -477,15 +480,16 @@ export default function InventarioPage() {
     if (!provForm.razon_social) return;
     setSaving(true);
     try {
+      const esEdicion = !!proveedorModal.item;
+
       if (proveedorModal.item) {
         await inventarioApi.updateProveedor(proveedorModal.item.id, provForm);
-        toast.success("Proveedor actualizado correctamente");
       } else {
         await inventarioApi.createProveedor(provForm as ProveedorIn);
-        toast.success("Proveedor creado correctamente");
       }
       await cargarProveedores();
       setProveedorModal({ open: false, item: null });
+      toast.success(esEdicion ? "Proveedor actualizado correctamente" : "Proveedor creado correctamente");
     } catch (err) {
       console.error(err);
       toast.error(proveedorModal.item ? "Error al actualizar el proveedor" : "Error al crear el proveedor");
@@ -498,15 +502,16 @@ export default function InventarioPage() {
     if (!cliForm.nombre) return;
     setSaving(true);
     try {
+      const esEdicion = !!clienteModal.item;
+
       if (clienteModal.item) {
         await inventarioApi.updateCliente(clienteModal.item.id, cliForm);
-        toast.success("Cliente actualizado correctamente");
       } else {
         await inventarioApi.createCliente({ nombre: "", tipo: "particular", ...cliForm } as ClienteIn);
-        toast.success("Cliente creado correctamente");
       }
       await cargarClientes();
       setClienteModal({ open: false, item: null });
+      toast.success(esEdicion ? "Cliente actualizado correctamente" : "Cliente creado correctamente");
     } catch (err) {
       console.error(err);
       toast.error(clienteModal.item ? "Error al actualizar el cliente" : "Error al crear el cliente");
@@ -530,8 +535,8 @@ export default function InventarioPage() {
         cargarClientes(),
         cargarCategorias()
       ]);
-      toast.success("Eliminado correctamente");
       setDeleteModal({ open: false, nombre: "", action: null });
+      toast.success("Eliminado correctamente");
     } catch (err) {
       console.error(err);
       toast.error("Error al eliminar");
@@ -552,15 +557,16 @@ export default function InventarioPage() {
     if (!catForm.nombre?.trim()) return;
     setSaving(true);
     try {
+      const esEdicion = !!categoriaModal.item;
+
       if (categoriaModal.item) {
         await inventarioApi.updateCategoria(categoriaModal.item.id, catForm);
-        toast.success("Categoría actualizada correctamente");
       } else {
         await inventarioApi.createCategoria({ nombre: catForm.nombre, parent_id: catForm.parent_id ?? null, orden: catForm.orden ?? 0 });
-        toast.success("Categoría creada correctamente");
       }
       await cargarCategorias();
       setCategoriaModal({ open: false, item: null });
+      toast.success(esEdicion ? "Categoría actualizada correctamente" : "Categoría creada correctamente");
     } catch (err) {
       console.error(err);
       toast.error(categoriaModal.item ? "Error al actualizar la categoría" : "Error al crear la categoría");
@@ -588,13 +594,14 @@ export default function InventarioPage() {
     if (selectedIds.size === 0) return;
     setSaving(true);
     try {
+      const cantidad = selectedIds.size;
       await Promise.all([...selectedIds].map((id) => inventarioApi.deleteProducto(id)));
       await Promise.all([
         cargarProductos(busqueda || undefined),
         cargarEstadisticas()
       ]);
-      toast.success(`${selectedIds.size} producto${selectedIds.size > 1 ? 's' : ''} eliminado${selectedIds.size > 1 ? 's' : ''} correctamente`);
       clearSelection();
+      toast.success(`${cantidad} producto${cantidad > 1 ? 's' : ''} eliminado${cantidad > 1 ? 's' : ''} correctamente`);
     } catch (err) {
       console.error(err);
       toast.error("Error al eliminar los productos");
