@@ -22,7 +22,6 @@ export default defineConfig({
           "vendor-ui":     ["lucide-react", "sonner"],
           "vendor-radix":  [
             "@radix-ui/react-dialog",
-            "@radix-ui/react-select",
             "@radix-ui/react-label",
             "@radix-ui/react-slot",
           ],
