@@ -19,6 +19,7 @@ Cascada de validación (de barata a cara):
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -127,19 +128,26 @@ async def check_ip_access(
         )
 
 
+# Cache en memoria: evita ir a Supabase en cada request para verificar suscripción/módulo.
+# Clave: "{empresa_id}:{modulo}" → timestamp del último check OK.
+# TTL: 60s. Si la suscripción expira, el próximo check tras 60s lo detecta.
+_modulo_cache: dict[str, float] = {}
+_MODULO_TTL = 60.0
+
+
 # -----------------------------------------------------------------------------
 # Autorización por módulo (plan/addon)
 # -----------------------------------------------------------------------------
 def require_modulo(codigo_modulo: str):
-    """Genera una dependencia que verifica que la empresa tiene el módulo activo.
-
-    Usa la función SQL `empresa_tiene_modulo(text)` para mantener una sola
-    fuente de verdad sobre qué módulos están activos.
-    """
+    """Genera una dependencia que verifica que la empresa tiene el módulo activo."""
 
     async def _check(ctx: TenantContext = Depends(get_tenant_context)) -> None:
+        cache_key = f"{ctx.empresa_id}:{codigo_modulo}"
+        ts = _modulo_cache.get(cache_key)
+        if ts is not None and time.monotonic() - ts < _MODULO_TTL:
+            return  # cache hit — 0 roundtrips a Supabase
+
         async with acquire_tenant_conn(ctx.empresa_id, ctx.user_id) as conn:
-            # 1. Suscripción vigente
             sub = await conn.fetchrow(
                 """
                 select estado from public.empresa_suscripciones
@@ -150,18 +158,17 @@ def require_modulo(codigo_modulo: str):
                 ctx.empresa_id,
             )
             if sub is None:
+                _modulo_cache.pop(cache_key, None)
                 raise PaymentRequiredError("la empresa no tiene suscripción activa")
-            if sub["estado"] == "morosa":
-                # Permitir lectura pero el frontend debería mostrar banner.
-                pass
 
-            # 2. Módulo habilitado (plan o addon)
             tiene = await conn.fetchval(
                 "select public.empresa_tiene_modulo($1)", codigo_modulo
             )
             if not tiene:
-                # TODO: calcular plan recomendado para upsell
+                _modulo_cache.pop(cache_key, None)
                 raise ModuleNotEnabledError(codigo_modulo, upgrade_to=None)
+
+        _modulo_cache[cache_key] = time.monotonic()
 
     return _check
 

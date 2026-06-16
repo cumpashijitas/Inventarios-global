@@ -38,18 +38,21 @@ class ProductosRepository:
             where_clauses.append("p.activo = true")
 
         if search and search.strip():
-            params.append(f"%{search.strip().lower()}%")
-            n = len(params)
-            where_clauses.append(
-                f"(lower(p.nombre) like ${n} or lower(p.sku) like ${n}"
-                f" or lower(coalesce(p.codigo_universal,'')) like ${n}"
-                f" or lower(coalesce(p.marca,'')) like ${n}"
-                f" or lower(coalesce(p.procedencia,'')) like ${n}"
-                f" or lower(coalesce(p.motor,'')) like ${n}"
-                f" or lower(coalesce(p.modelos,'')) like ${n}"
-                f" or lower(coalesce(p.industria,'')) like ${n}"
-                f" or lower(coalesce(p.medidas,'')) like ${n})"
-            )
+            for token in search.strip().lower().split():
+                params.append(f"%{token}%")
+                n = len(params)
+                where_clauses.append(
+                    f"(lower(p.nombre) like ${n} or lower(p.sku) like ${n}"
+                    f" or lower(coalesce(p.codigo_universal,'')) like ${n}"
+                    f" or lower(coalesce(p.marca,'')) like ${n}"
+                    f" or lower(coalesce(p.procedencia,'')) like ${n}"
+                    f" or lower(coalesce(p.motor,'')) like ${n}"
+                    f" or lower(coalesce(p.modelos,'')) like ${n}"
+                    f" or lower(coalesce(p.industria,'')) like ${n}"
+                    f" or lower(coalesce(p.medidas,'')) like ${n}"
+                    f" or lower(coalesce(p.aplicacion,'')) like ${n}"
+                    f" or lower(coalesce(p.descripcion,'')) like ${n})"
+                )
 
         where = " and ".join(where_clauses)
 

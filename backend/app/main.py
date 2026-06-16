@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import Any
@@ -145,6 +146,7 @@ else:
 @app.middleware("http")
 async def request_context(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    t0 = time.perf_counter()
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(
         request_id=request_id,
@@ -153,8 +155,11 @@ async def request_context(request: Request, call_next):
     )
     try:
         response = await call_next(request)
+        ms = round((time.perf_counter() - t0) * 1000, 1)
+        log.info("request", status=response.status_code, duration_ms=ms)
     except Exception as exc:  # noqa: BLE001
-        log.exception("unhandled_error", error=str(exc))
+        ms = round((time.perf_counter() - t0) * 1000, 1)
+        log.exception("unhandled_error", error=str(exc), duration_ms=ms)
         response = JSONResponse(
             status_code=500,
             content={

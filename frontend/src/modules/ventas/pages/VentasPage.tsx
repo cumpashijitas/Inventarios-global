@@ -5,6 +5,8 @@ import {
 import { useMemo } from "react";
 import DevolucionesTab from "@/modules/ventas/pages/DevolucionesTab";
 import { useEffect, useRef, useState } from "react";
+import { swr, bust, peek } from "@/shared/utils/cache";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
@@ -382,6 +384,7 @@ function ClienteSearch({
 // Página principal
 // ─────────────────────────────────────────────────────────────────────────────
 export default function VentasPage() {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("ventas");
   const [ventas, setVentas]             = useState<Venta[]>([]);
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
@@ -430,24 +433,58 @@ export default function VentasPage() {
 
   // ── Carga inicial ──────────────────────────────────────────────────────────
   const cargarVentas = async () => {
+    bust("ventas:lista");
     try { setVentas((await ventasApi.listVentas({ page_size: 100 })).items); }
     catch (e) { console.error(e); }
   };
   const cargarCotizaciones = async () => {
+    bust("ventas:cots");
     try { setCotizaciones((await ventasApi.listCotizaciones({ page_size: 100 })).items); }
     catch (e) { console.error(e); }
   };
 
   useEffect(() => {
-    Promise.all([
-      cargarVentas(),
-      cargarCotizaciones(),
-      ventasApi.topProductos(30, 5).then(setTopProductos).catch(console.error),
-      inventarioApi.listProductos({ page_size: 60, only_active: true }).then((r) => setProductos(r.items)).catch(console.error),
-      inventarioApi.listClientes({ page_size: 200 }).then((r) => setClientes(r.items)),
-      authApi.empresaPerfil().then(setEmpresa).catch(console.error),
-    ]).finally(() => setLoading(false));
-  }, []);
+    const alive = { v: true };
+    const shown = new Set<string>();
+    const KEYS = ["v", "c", "tp", "p", "cl", "emp"];
+    const mark = (k: string) => {
+      shown.add(k);
+      if (KEYS.every(x => shown.has(x)) && alive.v) setLoading(false);
+    };
+
+    swr("ventas:lista",
+      () => ventasApi.listVentas({ page_size: 100 }),
+      (r) => { if (alive.v) setVentas(r.items); mark("v"); },
+      30_000,
+    );
+    swr("ventas:cots",
+      () => ventasApi.listCotizaciones({ page_size: 100 }),
+      (r) => { if (alive.v) setCotizaciones(r.items); mark("c"); },
+      30_000,
+    );
+    swr("ventas:top",
+      () => ventasApi.topProductos(30, 5),
+      (r) => { if (alive.v) setTopProductos(r); mark("tp"); },
+      60_000,
+    );
+    swr("inv:productos:ventas",
+      () => inventarioApi.listProductos({ page_size: 60, only_active: true }),
+      (r) => { if (alive.v) setProductos(r.items); mark("p"); },
+      300_000,
+    );
+    swr("inv:clientes",
+      () => inventarioApi.listClientes({ page_size: 200 }),
+      (r) => { if (alive.v) setClientes(r.items); mark("cl"); },
+      300_000,
+    );
+    swr("auth:empresa",
+      () => authApi.empresaPerfil(),
+      (r) => { if (alive.v) setEmpresa(r); mark("emp"); },
+      600_000,
+    );
+
+    return () => { alive.v = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Stats ──────────────────────────────────────────────────────────────────
   const totalVentas   = ventas.reduce((s, v) => s + parseFloat(v.total), 0);
@@ -678,10 +715,10 @@ export default function VentasPage() {
           <p className="text-sm text-slate-500">Registro de ventas y cotizaciones del día</p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => { resetForm(); setModalCot(true); }} variant="outline" className="gap-1.5 text-sm">
+          <Button onClick={() => navigate("/ventas/nueva?modo=cotizacion")} variant="outline" className="gap-1.5 text-sm">
             <FileText className="h-4 w-4" /> Nueva Cotización
           </Button>
-          <Button onClick={() => { resetForm(); setModalVenta(true); }} className="gap-1.5 bg-slate-800 hover:bg-slate-900 text-white text-sm">
+          <Button onClick={() => navigate("/ventas/nueva")} className="gap-1.5 bg-slate-800 hover:bg-slate-900 text-white text-sm">
             <Plus className="h-4 w-4" /> Nueva Venta
           </Button>
         </div>
@@ -1212,7 +1249,7 @@ function ProductSearchPanel({
                       ${enCarrito ? "bg-indigo-50/60 hover:bg-indigo-50" : "hover:bg-slate-50"}`}
                   >
                     {r.imagen_url ? (
-                      <img src={r.imagen_url} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover border border-slate-100 shadow-sm" />
+                      <img src={r.imagen_url} alt="" loading="lazy" className="h-14 w-14 shrink-0 rounded-lg object-cover border border-slate-100 shadow-sm" />
                     ) : (
                       <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 text-lg font-bold text-slate-400 shadow-sm">
                         {r.nombre[0]?.toUpperCase()}

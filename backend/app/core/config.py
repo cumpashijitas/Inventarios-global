@@ -57,8 +57,8 @@ class Settings(BaseSettings):
 
     # --- Database ---
     database_url: str
-    database_pool_min: int = 1
-    database_pool_max: int = 10
+    database_pool_min: int = 3
+    database_pool_max: int = 20
 
     # --- Email (Resend) ---
     resend_api_key: str | None = None          # re_xxxxxxxxxxxx

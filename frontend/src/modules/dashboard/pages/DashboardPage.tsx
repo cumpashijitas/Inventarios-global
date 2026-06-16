@@ -14,7 +14,8 @@ import {
   X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { swr, peek } from "@/shared/utils/cache";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { dashboardApi } from "@/modules/dashboard/services/dashboardApi";
 import { adminApi } from "@/modules/administracion/services/adminApi";
@@ -246,26 +247,43 @@ export default function DashboardPage() {
   const [reporteMsg, setReporteMsg] = useState<string | null>(null);
   const rol = useAuthStore((s) => s.rol);
   const esAdmin = rol === "admin";
+  const mounted = useRef(true);
 
   const cargar = async (showRefresh = false) => {
     if (showRefresh) setRefreshing(true);
-    else setLoading(true);
     try {
       const [statsData, sistemaData] = await Promise.all([
         dashboardApi.getStats(),
-        adminApi.getSistema().catch(() => null),   // no falla si hay error de permisos
+        adminApi.getSistema().catch(() => null),
       ]);
+      if (!mounted.current) return;
       setStats(statsData);
       if (sistemaData) setAlertasStockActivas(sistemaData.alertas_stock_bajo);
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (mounted.current) { setLoading(false); setRefreshing(false); }
     }
   };
 
-  useEffect(() => { cargar(); }, []);
+  useEffect(() => {
+    mounted.current = true;
+    // swr: muestra cache instantáneamente, revalida en background cada 60s
+    const hasCached = swr(
+      "dashboard:stats",
+      () => Promise.all([dashboardApi.getStats(), adminApi.getSistema().catch(() => null)]).then(
+        ([s, sis]) => ({ s, sis })
+      ),
+      ({ s, sis }) => {
+        setStats(s);
+        if (sis) setAlertasStockActivas(sis.alertas_stock_bajo);
+        setLoading(false);
+      },
+      60_000,
+    );
+    if (!hasCached) cargar(); // primera vez: fetch normal con spinner
+    return () => { mounted.current = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleEnviarReporte = async () => {
     setEnviandoReporte(true);

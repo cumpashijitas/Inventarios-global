@@ -13,6 +13,7 @@ interface ListVentasParams {
   estado?: string;
   desde?: string;
   hasta?: string;
+  search?: string;
 }
 interface ListCotizacionesParams {
   page?: number;

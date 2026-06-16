@@ -65,8 +65,8 @@ class VentaOut(BaseModel):
     descuento_monto: Decimal
     impuesto_monto: Decimal
     total: Decimal
-    monto_pagado: Decimal
-    cambio: Decimal
+    monto_pagado: Decimal | None = None
+    cambio: Decimal | None = None
     notas: str | None = None
     created_at: datetime
     items: list[VentaItemOut] = []

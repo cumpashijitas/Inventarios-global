@@ -3,7 +3,8 @@ import {
   Gem, ImageIcon, Info, Mail, MapPin, Package, Pencil, Phone,
   Plus, Ruler, Search, ShieldCheck, Tag, Trash2, User, X, Check,
 } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { swr, bust, peek } from "@/shared/utils/cache";
 import { toast } from "sonner";
 import { useAuthStore } from "@/shared/stores/auth.store";
 import { puedeAcceder } from "@/shared/config/roles";
@@ -83,6 +84,29 @@ export default function InventarioPage() {
 
   // Estado de selección de filas (para selección múltiple)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Anchos redimensionables de columnas sticky
+  const [skuColWidth,  setSkuColWidth]  = useState(130);
+  const [univColWidth, setUnivColWidth] = useState(120);
+  const [prodColWidth, setProdColWidth] = useState(220);
+  const resizingRef = useRef<{ startX: number; startW: number } | null>(null);
+
+  const makeResizeHandler = (current: number, setter: (w: number) => void) =>
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      resizingRef.current = { startX: e.clientX, startW: current };
+      const onMove = (ev: MouseEvent) => {
+        if (!resizingRef.current) return;
+        setter(Math.max(60, resizingRef.current.startW + (ev.clientX - resizingRef.current.startX)));
+      };
+      const onUp = () => {
+        resizingRef.current = null;
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    };
 
   // Estado de paginación
   const [page, setPage] = useState(1);
@@ -174,34 +198,67 @@ export default function InventarioPage() {
     setProductos(r.items);
     setTotalProductos(r.total);
   };
-  const cargarProveedores = async () => {
-    const r = await inventarioApi.listProveedores({ page_size: 200 });
-    setProveedores(r.items);
-  };
-  const cargarClientes = async () => {
-    const r = await inventarioApi.listClientes({ page_size: 200 });
-    setClientes(r.items);
-  };
-  const cargarCategorias = async () => {
-    // false = traer todas (activas + inactivas) para gestión
-    const r = await inventarioApi.listCategorias(false);
-    setCategorias(r);
+
+  // Llama a esto antes de recargar tras una mutación (crear/editar/borrar)
+  const recargarTras = async () => {
+    bust("inv:productos");
+    await cargarProductos(busqueda || undefined);
   };
 
+  // Evita que el efecto de busqueda se dispare en el mount inicial
+  const busquedaMounted = useRef(false);
+
   useEffect(() => {
-    Promise.all([
-      cargarProductos(),
-      cargarProveedores(),
-      cargarClientes(),
-      cargarCategorias(),
-      inventarioApi.listUnidades().then(setUnidades),
-      inventarioApi.listAlmacenes().then(setAlmacenes),
-    ]).catch(console.error).finally(() => setLoading(false));
+    const alive = { v: true };
+    // Conjunto de claves que ya mostraron datos (cache o fetch)
+    const shown = new Set<string>();
+    const KEYS = ["p", "prov", "cli", "cat", "unid", "alm"];
+    const mark = (k: string) => {
+      shown.add(k);
+      if (KEYS.every(x => shown.has(x)) && alive.v) setLoading(false);
+    };
+
+    // swr: entrega cache INSTANTÁNEAMENTE y revalida en background
+    // onData se llama al menos una vez (cache o fetch)
+    swr("inv:productos:1",
+      () => inventarioApi.listProductos({ page: 1, page_size: pageSize }),
+      (r) => { if (alive.v) { setProductos(r.items); setTotalProductos(r.total); } mark("p"); },
+      30_000,
+    );
+    swr("inv:proveedores",
+      () => inventarioApi.listProveedores({ page_size: 200 }),
+      (r) => { if (alive.v) setProveedores(r.items); mark("prov"); },
+      300_000,
+    );
+    swr("inv:clientes",
+      () => inventarioApi.listClientes({ page_size: 200 }),
+      (r) => { if (alive.v) setClientes(r.items); mark("cli"); },
+      300_000,
+    );
+    swr("inv:categorias",
+      () => inventarioApi.listCategorias(false),
+      (r) => { if (alive.v) setCategorias(r); mark("cat"); },
+      300_000,
+    );
+    swr("inv:unidades",
+      () => inventarioApi.listUnidades(),
+      (r) => { if (alive.v) setUnidades(r); mark("unid"); },
+      300_000,
+    );
+    swr("inv:almacenes",
+      () => inventarioApi.listAlmacenes(),
+      (r) => { if (alive.v) setAlmacenes(r); mark("alm"); },
+      300_000,
+    );
+
+    busquedaMounted.current = true;
+    return () => { alive.v = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (!busquedaMounted.current) return; // ignorar mount inicial
     const timer = setTimeout(() => {
-      setPage(1); // resetear a página 1 cuando busca
+      setPage(1);
       cargarProductos(busqueda || undefined, 1);
     }, 300);
     return () => clearTimeout(timer);
@@ -363,7 +420,7 @@ export default function InventarioPage() {
             motivo: "Ajuste manual desde formulario de producto",
           });
         }
-        await cargarProductos(busqueda || undefined);
+        await recargarTras();
       } else {
         if (!unidades.length) { toast.error("Crea al menos una unidad de medida primero."); return; }
         const nuevo = await inventarioApi.createProducto({ ...pForm, unidad_id: unidades[0].id } as ProductoIn);
@@ -378,7 +435,7 @@ export default function InventarioPage() {
             motivo: "Stock inicial al crear producto",
           });
         }
-        await cargarProductos(busqueda || undefined);
+        await recargarTras();
       }
 
       setProductoModal({ open: false, item: null });
@@ -410,7 +467,7 @@ export default function InventarioPage() {
           motivo: `Stock inicial al clonar desde ${clonarModal.item?.nombre ?? ""}`,
         });
       }
-      await cargarProductos(busqueda || undefined);
+      await recargarTras();
       setClonarModal({ open: false, item: null });
       toast.success("Producto clonado correctamente");
     } catch (err) {
@@ -432,7 +489,7 @@ export default function InventarioPage() {
       const { imagen_url } = await inventarioApi.uploadImagenProducto(productoModal.item.id, file);
       setImgPreview(imagen_url);
       setPForm((f) => ({ ...f, imagen_url }));
-      await cargarProductos(busqueda || undefined);
+      await recargarTras();
       toast.success("Imagen actualizada correctamente");
     } catch (err) {
       console.error("Error subiendo imagen:", err);
@@ -563,7 +620,7 @@ export default function InventarioPage() {
     try {
       const cantidad = selectedIds.size;
       await Promise.all([...selectedIds].map((id) => inventarioApi.deleteProducto(id)));
-      await cargarProductos(busqueda || undefined);
+      await recargarTras();
       clearSelection();
       toast.success(`${cantidad} producto${cantidad > 1 ? 's' : ''} eliminado${cantidad > 1 ? 's' : ''} correctamente`);
     } catch (err) {
@@ -821,23 +878,42 @@ export default function InventarioPage() {
               )}
 
               <div className="h-full overflow-auto">
-                {puedeEditar ? (
-                  /* ── TABLA ADMINISTRADOR con selección ── */
+                {(() => {
+                  // Anchos de las 4 columnas sticky (3 redimensionables)
+                  const W_FOTO = 62;
+                  const L_SKU  = W_FOTO;
+                  const L_UNIV = W_FOTO + skuColWidth;
+                  const L_DESC = W_FOTO + skuColWidth + univColWidth;
+
+                  const TH = "border border-amber-500 bg-amber-400 px-1 py-1 font-bold text-black uppercase text-[10px] text-center leading-tight";
+                  const TH_S = `${TH} sticky z-40`;
+
+                  return puedeEditar ? (
+                  /* ── TABLA ADMINISTRADOR ── */
                   <table className="border-collapse text-[11px]" style={{ minWidth: "max-content", width: "100%" }}>
                     <thead className="sticky top-0 z-30">
                       <tr>
-                        <th className="border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px] sticky left-0 z-40 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
-                          <input type="checkbox"
-                            checked={selectedIds.size === filtroProd.length && filtroProd.length > 0}
-                            onChange={toggleSelectAll}
-                            className="h-3.5 w-3.5 rounded border-amber-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+                        {/* 4 columnas fijas */}
+                        <th className={TH_S} style={{ left: 0, width: W_FOTO, minWidth: W_FOTO }}>FOTO</th>
+                        <th className={`${TH_S} relative select-none`} style={{ left: L_SKU, width: skuColWidth, minWidth: skuColWidth }}>
+                          CÓDIGO
+                          <div onMouseDown={makeResizeHandler(skuColWidth, setSkuColWidth)} className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-amber-600/50" />
                         </th>
-                        <th className="border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px] sticky left-[41px] z-40 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">FOTO</th>
-                        {["CÓDIGO MARCA", "DESCRIPCIÓN", "CANTIDAD", "STOCK MÍNIMO", "UNIDAD", "CÓDIGO UNIVERSAL", "MARCA", "PROCEDENCIA",
-                          "COSTO COMPRA UNITARIO", "COSTO COMPRA CAJA", "PRECIO FACTURA", "PRECIO POR MAYOR", "PRECIO TALLER", "PRECIO MAYORISTA",
-                          "CATEGORÍA", "INDUSTRIA", "MODELO", "MEDIDA", "PROVEEDOR"].map((h, i) => (
-                          <th key={h} className={`border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px] ${i < 2 ? "sticky z-40 shadow-[2px_0_5px_rgba(0,0,0,0.1)]" : ""}`}
-                            style={i === 0 ? { left: "101px" } : i === 1 ? { left: "221px" } : undefined}>{h}</th>
+                        <th className={`${TH_S} relative select-none`} style={{ left: L_UNIV, width: univColWidth, minWidth: univColWidth }}>
+                          CÓD. UNIV.
+                          <div onMouseDown={makeResizeHandler(univColWidth, setUnivColWidth)} className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-amber-600/50" />
+                        </th>
+                        <th className={`${TH_S} relative select-none`} style={{ left: L_DESC, width: prodColWidth, minWidth: prodColWidth }}>
+                          DESCRIPCIÓN
+                          <div onMouseDown={makeResizeHandler(prodColWidth, setProdColWidth)} className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-amber-600/50" />
+                        </th>
+                        {/* Columnas scrollables */}
+                        {["CANTIDAD","STOCK MÍN","UNIDAD","MARCA","PROCEDENCIA",
+                          "COSTO UNITARIO","COSTO CAJA","PRECIO FACTURA","PRECIO MAYOR","PRECIO TALLER","PRECIO MAYORISTA",
+                          "CATEGORÍA","INDUSTRIA","MODELO","MEDIDA","PROVEEDOR","APLICACIÓN","DETALLE"].map((h) => (
+                          <th key={h} className={TH}>
+                            {h.split(" ").map((w, i) => <React.Fragment key={i}>{i > 0 && <br />}{w}</React.Fragment>)}
+                          </th>
                         ))}
                       </tr>
                     </thead>
@@ -849,71 +925,79 @@ export default function InventarioPage() {
                         const stockNum = Math.round(Number(p.stock_total ?? 0));
                         const minNum = Math.round(parseFloat(p.stock_minimo));
                         const stockColor = stockNum === 0 ? "text-red-600 font-bold" : stockNum < minNum ? "text-orange-500 font-bold" : "text-slate-800 font-semibold";
-                        const rowBg = idx % 2 === 0 ? "bg-white" : "bg-amber-50/40";
+                        const rowBg = idx % 2 === 0 ? "bg-white" : "bg-amber-50";
                         const isSelected = selectedIds.has(p.id);
+                        const bg = isSelected ? '#eef2ff' : idx % 2 === 0 ? '#ffffff' : '#fffbeb';
+                        const C = "border border-slate-200 px-2 py-1 whitespace-nowrap";
+                        const S = "border border-slate-200 px-1 py-1 sticky z-20";
                         return (
-                          <tr key={p.id} className={`${rowBg} ${isSelected ? "bg-indigo-50 border-l-4 border-l-indigo-600" : ""} hover:bg-amber-100/60 ${!p.activo ? "opacity-50" : ""}`}>
-                            {/* Checkbox fijo */}
-                            <td className={`border border-slate-200 px-2 py-1 text-center sticky left-0 z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>
-                              <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(p.id)}
-                                className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
-                            </td>
-                            {/* Foto fija */}
-                            <td className={`border border-slate-200 px-1 py-1 sticky left-[41px] z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>
-                              <div className="w-12 h-12 rounded overflow-hidden bg-slate-100 flex items-center justify-center">
-                                {p.imagen_url ? (
-                                  <img src={p.imagen_url} alt={p.nombre} className="w-full h-full object-cover" />
-                                ) : (
-                                  <ImageIcon className="h-5 w-5 text-slate-300" />
-                                )}
+                          <tr key={p.id} className={`${rowBg} ${isSelected ? "border-l-4 border-l-indigo-600" : ""} hover:bg-amber-100/60 ${!p.activo ? "opacity-50" : ""}`}>
+                            {/* Sticky: FOTO */}
+                            <td className={S} style={{ left: 0, width: W_FOTO, minWidth: W_FOTO, maxWidth: W_FOTO, backgroundColor: bg }}>
+                              <div className="flex items-center gap-1">
+                                <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(p.id)}
+                                  className="h-3.5 w-3.5 flex-shrink-0 rounded border-slate-300 text-indigo-600 cursor-pointer" />
+                                <div className="w-7 h-7 rounded overflow-hidden bg-slate-100 flex-shrink-0 flex items-center justify-center">
+                                  {p.imagen_url ? <img src={p.imagen_url} alt="" loading="lazy" className="w-full h-full object-cover" /> : <ImageIcon className="h-3 w-3 text-slate-300" />}
+                                </div>
                               </div>
                             </td>
-                            {/* Código marca fijo */}
-                            <td className={`border border-slate-200 px-2 py-1 font-mono text-indigo-700 font-semibold whitespace-nowrap sticky left-[101px] z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>{p.sku}</td>
-                            {/* Descripción fija */}
-                            <td className={`border border-slate-200 px-2 py-1 max-w-[200px] sticky left-[221px] z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>
-                              <p className="font-semibold text-slate-800 truncate leading-tight">{p.nombre}</p>
+                            {/* Sticky: CÓDIGO */}
+                            <td className={`${S} font-mono text-indigo-700 font-semibold`} style={{ left: L_SKU, width: skuColWidth, minWidth: skuColWidth, maxWidth: skuColWidth, backgroundColor: bg }}>{p.sku}</td>
+                            {/* Sticky: CÓD. UNIV. */}
+                            <td className={`${S} font-mono text-slate-500`} style={{ left: L_UNIV, width: univColWidth, minWidth: univColWidth, maxWidth: univColWidth, backgroundColor: bg }}>{p.codigo_universal ?? "—"}</td>
+                            {/* Sticky: DESCRIPCIÓN (resizable) */}
+                            <td className={`${S} text-slate-800 overflow-hidden`} style={{ left: L_DESC, width: prodColWidth, minWidth: prodColWidth, maxWidth: prodColWidth, backgroundColor: bg }}>
+                              <span className="block truncate">{p.nombre}</span>
                             </td>
-                            {/* Resto de columnas scrolleables */}
-                            <td className={`border border-slate-200 px-2 py-1 text-center font-mono ${stockColor}`}>{stockNum}</td>
-                            <td className="border border-slate-200 px-2 py-1 text-center font-mono text-slate-500">{minNum}</td>
-                            <td className="border border-slate-200 px-2 py-1 text-center text-slate-600">{unidCodigo}</td>
-                            <td className="border border-slate-200 px-2 py-1 font-mono text-slate-500 whitespace-nowrap">{p.codigo_universal ?? "—"}</td>
-                            <td className="border border-slate-200 px-2 py-1 text-slate-600 whitespace-nowrap">{p.marca ?? "—"}</td>
-                            <td className="border border-slate-200 px-2 py-1 text-slate-600 whitespace-nowrap">{p.procedencia ?? "—"}</td>
-                            <td className="border border-slate-200 px-2 py-1 font-mono text-right text-slate-700 whitespace-nowrap">{fmtBs(p.precio_compra)}</td>
-                            <td className="border border-slate-200 px-2 py-1 font-mono text-right text-slate-500 whitespace-nowrap">{p.costo_caja ? fmtBs(p.costo_caja) : "—"}</td>
-                            <td className="border border-slate-200 px-2 py-1 font-mono text-right font-semibold text-emerald-700 whitespace-nowrap">{fmtBs(p.precio_venta)}</td>
-                            <td className="border border-slate-200 px-2 py-1 font-mono text-right text-slate-700 whitespace-nowrap">{p.precio_mayor ? fmtBs(p.precio_mayor) : "—"}</td>
-                            <td className="border border-slate-200 px-2 py-1 font-mono text-right text-slate-700 whitespace-nowrap">{p.precio_mecanico ? fmtBs(p.precio_mecanico) : "—"}</td>
-                            <td className="border border-slate-200 px-2 py-1 font-mono text-right text-blue-700 font-semibold whitespace-nowrap">{p.precio_real ? fmtBs(p.precio_real) : "—"}</td>
-                            <td className="border border-slate-200 px-2 py-1 text-slate-600 whitespace-nowrap">{catNombre}</td>
-                            <td className="border border-slate-200 px-2 py-1 text-slate-600 whitespace-nowrap">{p.industria ?? "—"}</td>
-                            <td className="border border-slate-200 px-2 py-1 text-slate-500 max-w-[140px] truncate">{p.modelos ?? "—"}</td>
-                            <td className="border border-slate-200 px-2 py-1 text-slate-500 whitespace-nowrap">{p.medidas ?? "—"}</td>
-                            <td className="border border-slate-200 px-2 py-1 text-slate-600 whitespace-nowrap max-w-[130px] truncate">{provNombre}</td>
+                            {/* Scrollables */}
+                            <td className={`${C} text-center font-mono ${stockColor}`}>{stockNum}</td>
+                            <td className={`${C} text-center font-mono text-slate-500`}>{minNum}</td>
+                            <td className={`${C} text-center text-slate-600`}>{unidCodigo}</td>
+                            <td className={`${C} text-slate-600`}>{p.marca ?? "—"}</td>
+                            <td className={`${C} text-slate-600`}>{p.procedencia ?? "—"}</td>
+                            <td className={`${C} font-mono text-right text-slate-700`}>{fmtBs(p.precio_compra)}</td>
+                            <td className={`${C} font-mono text-right text-slate-500`}>{p.costo_caja ? fmtBs(p.costo_caja) : "—"}</td>
+                            <td className={`${C} font-mono text-right font-semibold text-emerald-700`}>{fmtBs(p.precio_venta)}</td>
+                            <td className={`${C} font-mono text-right text-slate-700`}>{p.precio_mayor ? fmtBs(p.precio_mayor) : "—"}</td>
+                            <td className={`${C} font-mono text-right text-slate-700`}>{p.precio_mecanico ? fmtBs(p.precio_mecanico) : "—"}</td>
+                            <td className={`${C} font-mono text-right text-blue-700 font-semibold`}>{p.precio_real ? fmtBs(p.precio_real) : "—"}</td>
+                            <td className={`${C} text-slate-600`}>{catNombre}</td>
+                            <td className={`${C} text-slate-600`}>{p.industria ?? "—"}</td>
+                            <td className={`${C} text-slate-500`}>{p.modelos ?? "—"}</td>
+                            <td className={`${C} text-slate-500`}>{p.medidas ?? "—"}</td>
+                            <td className={`${C} text-slate-600`}>{provNombre}</td>
+                            <td className={`${C} text-slate-500`}>{p.aplicacion ?? "—"}</td>
+                            <td className={`${C} text-slate-500`}>{p.descripcion ?? "—"}</td>
                           </tr>
                         );
                       })}
                     </tbody>
                   </table>
                 ) : (
-                  /* ── TABLA VENDEDOR con selección ── */
+                  /* ── TABLA VENDEDOR ── */
                   <table className="border-collapse text-[11px]" style={{ minWidth: "max-content", width: "100%" }}>
                     <thead className="sticky top-0 z-30">
                       <tr>
-                        <th className="border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px] sticky left-0 z-40 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
-                          <input type="checkbox"
-                            checked={selectedIds.size === filtroProd.length && filtroProd.length > 0}
-                            onChange={toggleSelectAll}
-                            className="h-3.5 w-3.5 rounded border-amber-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+                        <th className={TH_S} style={{ left: 0, width: W_FOTO, minWidth: W_FOTO }}>FOTO</th>
+                        <th className={`${TH_S} relative select-none`} style={{ left: L_SKU, width: skuColWidth, minWidth: skuColWidth }}>
+                          CÓDIGO
+                          <div onMouseDown={makeResizeHandler(skuColWidth, setSkuColWidth)} className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-amber-600/50" />
                         </th>
-                        <th className="border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px] sticky left-[41px] z-40 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">FOTO</th>
-                        {["CÓDIGO MARCA", "DESCRIPCIÓN", "CANTIDAD", "STOCK MÍNIMO", "CÓDIGO UNIVERSAL", "MARCA",
-                          "PROCEDENCIA", "UNIDAD", "PRECIO FACTURA", "PRECIO POR MAYOR", "PRECIO TALLER", "PRECIO MAYORISTA",
-                          "MOTOR", "MODELO", "UBICACIÓN"].map((h, i) => (
-                          <th key={h} className={`border border-amber-500 bg-amber-400 px-2 py-2 text-center font-bold text-black whitespace-nowrap uppercase tracking-wide text-[10px] ${i < 2 ? "sticky z-40 shadow-[2px_0_5px_rgba(0,0,0,0.1)]" : ""}`}
-                            style={i === 0 ? { left: "101px" } : i === 1 ? { left: "221px" } : undefined}>{h}</th>
+                        <th className={`${TH_S} relative select-none`} style={{ left: L_UNIV, width: univColWidth, minWidth: univColWidth }}>
+                          CÓD. UNIV.
+                          <div onMouseDown={makeResizeHandler(univColWidth, setUnivColWidth)} className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-amber-600/50" />
+                        </th>
+                        <th className={`${TH_S} relative select-none`} style={{ left: L_DESC, width: prodColWidth, minWidth: prodColWidth }}>
+                          DESCRIPCIÓN
+                          <div onMouseDown={makeResizeHandler(prodColWidth, setProdColWidth)} className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-amber-600/50" />
+                        </th>
+                        {["CANTIDAD","STOCK MÍN","MARCA","PROCEDENCIA","UNIDAD",
+                          "PRECIO FACTURA","PRECIO MAYOR","PRECIO TALLER","PRECIO MAYORISTA",
+                          "MOTOR","MODELO","UBICACIÓN","APLICACIÓN","DETALLE"].map((h) => (
+                          <th key={h} className={TH}>
+                            {h.split(" ").map((w, i) => <React.Fragment key={i}>{i > 0 && <br />}{w}</React.Fragment>)}
+                          </th>
                         ))}
                       </tr>
                     </thead>
@@ -923,46 +1007,48 @@ export default function InventarioPage() {
                         const stockNum = Math.round(Number(p.stock_total ?? 0));
                         const minNum = Math.round(parseFloat(p.stock_minimo));
                         const stockColor = stockNum === 0 ? "text-red-600 font-bold" : stockNum < minNum ? "text-orange-500 font-bold" : "text-slate-800 font-semibold";
-                        const rowBg = idx % 2 === 0 ? "bg-white" : "bg-amber-50/40";
+                        const rowBg = idx % 2 === 0 ? "bg-white" : "bg-amber-50";
                         const isSelected = selectedIds.has(p.id);
+                        const bg = isSelected ? '#eef2ff' : idx % 2 === 0 ? '#ffffff' : '#fffbeb';
+                        const C = "border border-slate-200 px-2 py-1 whitespace-nowrap";
+                        const S = "border border-slate-200 px-1 py-1 sticky z-20";
                         return (
-                          <tr key={p.id} className={`${rowBg} ${isSelected ? "bg-indigo-50 border-l-4 border-l-indigo-600" : ""} hover:bg-amber-100/60 ${!p.activo ? "opacity-50" : ""}`}>
-                            <td className={`border border-slate-200 px-2 py-1 text-center sticky left-0 z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>
-                              <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(p.id)}
-                                className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
-                            </td>
-                            <td className={`border border-slate-200 px-1 py-1 sticky left-[41px] z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>
-                              <div className="w-12 h-12 rounded overflow-hidden bg-slate-100 flex items-center justify-center">
-                                {p.imagen_url ? (
-                                  <img src={p.imagen_url} alt={p.nombre} className="w-full h-full object-cover" />
-                                ) : (
-                                  <ImageIcon className="h-5 w-5 text-slate-300" />
-                                )}
+                          <tr key={p.id} className={`${rowBg} ${isSelected ? "border-l-4 border-l-indigo-600" : ""} hover:bg-amber-100/60 ${!p.activo ? "opacity-50" : ""}`}>
+                            <td className={S} style={{ left: 0, width: W_FOTO, minWidth: W_FOTO, maxWidth: W_FOTO, backgroundColor: bg }}>
+                              <div className="flex items-center gap-1">
+                                <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(p.id)}
+                                  className="h-3.5 w-3.5 flex-shrink-0 rounded border-slate-300 text-indigo-600 cursor-pointer" />
+                                <div className="w-7 h-7 rounded overflow-hidden bg-slate-100 flex-shrink-0 flex items-center justify-center">
+                                  {p.imagen_url ? <img src={p.imagen_url} alt="" loading="lazy" className="w-full h-full object-cover" /> : <ImageIcon className="h-3 w-3 text-slate-300" />}
+                                </div>
                               </div>
                             </td>
-                            <td className={`border border-slate-200 px-2 py-1 font-mono text-indigo-700 font-semibold whitespace-nowrap sticky left-[101px] z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>{p.sku}</td>
-                            <td className={`border border-slate-200 px-2 py-1 max-w-[200px] sticky left-[221px] z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${rowBg} ${isSelected ? "bg-indigo-50" : ""}`}>
-                              <p className="font-semibold text-slate-800 truncate leading-tight">{p.nombre}</p>
+                            <td className={`${S} font-mono text-indigo-700 font-semibold`} style={{ left: L_SKU, width: skuColWidth, minWidth: skuColWidth, maxWidth: skuColWidth, backgroundColor: bg }}>{p.sku}</td>
+                            <td className={`${S} font-mono text-slate-500`} style={{ left: L_UNIV, width: univColWidth, minWidth: univColWidth, maxWidth: univColWidth, backgroundColor: bg }}>{p.codigo_universal ?? "—"}</td>
+                            <td className={`${S} text-slate-800 overflow-hidden`} style={{ left: L_DESC, width: prodColWidth, minWidth: prodColWidth, maxWidth: prodColWidth, backgroundColor: bg }}>
+                              <span className="block truncate">{p.nombre}</span>
                             </td>
-                            <td className={`border border-slate-200 px-2 py-1 text-center font-mono ${stockColor}`}>{stockNum}</td>
-                            <td className="border border-slate-200 px-2 py-1 text-center font-mono text-slate-500">{minNum}</td>
-                            <td className="border border-slate-200 px-2 py-1 font-mono text-slate-500 whitespace-nowrap">{p.codigo_universal ?? "—"}</td>
-                            <td className="border border-slate-200 px-2 py-1 text-slate-600 whitespace-nowrap">{p.marca ?? "—"}</td>
-                            <td className="border border-slate-200 px-2 py-1 text-slate-600 whitespace-nowrap">{p.procedencia ?? "—"}</td>
-                            <td className="border border-slate-200 px-2 py-1 text-center text-slate-600">{unidCodigo}</td>
-                            <td className="border border-slate-200 px-2 py-1 font-mono text-right font-semibold text-emerald-700 whitespace-nowrap">{fmtBs(p.precio_venta)}</td>
-                            <td className="border border-slate-200 px-2 py-1 font-mono text-right text-slate-700 whitespace-nowrap">{p.precio_mayor ? fmtBs(p.precio_mayor) : "—"}</td>
-                            <td className="border border-slate-200 px-2 py-1 font-mono text-right text-slate-700 whitespace-nowrap">{p.precio_mecanico ? fmtBs(p.precio_mecanico) : "—"}</td>
-                            <td className="border border-slate-200 px-2 py-1 font-mono text-right text-blue-700 font-semibold whitespace-nowrap">{p.precio_real ? fmtBs(p.precio_real) : "—"}</td>
-                            <td className="border border-slate-200 px-2 py-1 text-slate-600 whitespace-nowrap">{p.motor ?? "—"}</td>
-                            <td className="border border-slate-200 px-2 py-1 text-slate-500 max-w-[140px] truncate">{p.modelos ?? "—"}</td>
-                            <td className="border border-slate-200 px-2 py-1 text-slate-500 whitespace-nowrap">{p.ubicacion ?? "—"}</td>
+                            <td className={`${C} text-center font-mono ${stockColor}`}>{stockNum}</td>
+                            <td className={`${C} text-center font-mono text-slate-500`}>{minNum}</td>
+                            <td className={`${C} text-slate-600`}>{p.marca ?? "—"}</td>
+                            <td className={`${C} text-slate-600`}>{p.procedencia ?? "—"}</td>
+                            <td className={`${C} text-center text-slate-600`}>{unidCodigo}</td>
+                            <td className={`${C} font-mono text-right font-semibold text-emerald-700`}>{fmtBs(p.precio_venta)}</td>
+                            <td className={`${C} font-mono text-right text-slate-700`}>{p.precio_mayor ? fmtBs(p.precio_mayor) : "—"}</td>
+                            <td className={`${C} font-mono text-right text-slate-700`}>{p.precio_mecanico ? fmtBs(p.precio_mecanico) : "—"}</td>
+                            <td className={`${C} font-mono text-right text-blue-700 font-semibold`}>{p.precio_real ? fmtBs(p.precio_real) : "—"}</td>
+                            <td className={`${C} text-slate-600`}>{p.motor ?? "—"}</td>
+                            <td className={`${C} text-slate-500`}>{p.modelos ?? "—"}</td>
+                            <td className={`${C} text-slate-500`}>{p.ubicacion ?? "—"}</td>
+                            <td className={`${C} text-slate-500`}>{p.aplicacion ?? "—"}</td>
+                            <td className={`${C} text-slate-500`}>{p.descripcion ?? "—"}</td>
                           </tr>
                         );
                       })}
                     </tbody>
                   </table>
-                )}
+                );
+                })()}
               </div>
 
               {/* Controles de paginación */}
@@ -1812,10 +1898,12 @@ export default function InventarioPage() {
                         <p className="text-xs text-slate-400 font-mono">SKU: {p.sku}</p>
                       </div>
                     </div>
-                    <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 gap-1.5 mr-6"
-                      onClick={() => { setVerModal({ open: false, item: null }); abrirEditarProducto(p); }}>
-                      <Pencil className="h-3.5 w-3.5" /> Editar
-                    </Button>
+                    {puedeEditar && (
+                      <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 gap-1.5 mr-6"
+                        onClick={() => { setVerModal({ open: false, item: null }); abrirEditarProducto(p); }}>
+                        <Pencil className="h-3.5 w-3.5" /> Editar
+                      </Button>
+                    )}
                   </div>
                 </DialogHeader>
 
@@ -1826,7 +1914,7 @@ export default function InventarioPage() {
                     <div className="space-y-3">
                       <div className="rounded-xl overflow-hidden border border-slate-100 bg-slate-50 aspect-square flex items-center justify-center">
                         {p.imagen_url ? (
-                          <img src={p.imagen_url} alt={p.nombre} className="w-full h-full object-cover" />
+                          <img src={p.imagen_url} alt={p.nombre} loading="lazy" className="w-full h-full object-cover" />
                         ) : (
                           <ImageIcon className="h-14 w-14 text-slate-200" />
                         )}

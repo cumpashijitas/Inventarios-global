@@ -18,16 +18,18 @@ class VentasRepository:
     # ------------------------------------------------------------------
     async def next_numero_venta(self, empresa_id: UUID) -> str:
         """Genera el siguiente número de venta correlativo: V-YYYY-NNNN."""
-        year = await self.conn.fetchval("select extract(year from now())::int")
-        count = await self.conn.fetchval(
+        val = await self.conn.fetchval(
             """
-            select count(*) from public.ventas
-             where empresa_id = $1
-               and extract(year from fecha) = $2
+            select format('V-%s-%s',
+              extract(year from now())::int,
+              lpad((count(*) + 1)::text, 4, '0'))
+            from public.ventas
+            where empresa_id = $1
+              and extract(year from fecha) = extract(year from now())
             """,
-            empresa_id, year,
+            empresa_id,
         )
-        return f"V-{year}-{int(count) + 1:04d}"
+        return val
 
     async def crear_venta(self, empresa_id: UUID, user_id: UUID | None, data: dict[str, Any]) -> dict[str, Any]:
         async with self.conn.transaction():
@@ -65,25 +67,25 @@ class VentasRepository:
             )
             venta = dict(row)
 
-            # Insertar ítems
-            for item in data.get("items", []):
-                await self.conn.execute(
+            # Insertar ítems en un solo round-trip
+            if data.get("items"):
+                await self.conn.executemany(
                     """
                     insert into public.ventas_items
                       (empresa_id, venta_id, producto_id, sku, nombre,
                        cantidad, precio_unitario, descuento_pct, subtotal, costo_unitario)
                     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
                     """,
-                    empresa_id,
-                    venta["id"],
-                    item.get("producto_id"),
-                    item["sku"],
-                    item["nombre"],
-                    item["cantidad"],
-                    item["precio_unitario"],
-                    item.get("descuento_pct", 0),
-                    item["subtotal"],
-                    item.get("costo_unitario", 0),
+                    [
+                        (
+                            empresa_id, venta["id"],
+                            item.get("producto_id"), item["sku"], item["nombre"],
+                            item["cantidad"], item["precio_unitario"],
+                            item.get("descuento_pct", 0), item["subtotal"],
+                            item.get("costo_unitario", 0),
+                        )
+                        for item in data["items"]
+                    ],
                 )
 
         # Obtener ítems recién insertados (para incluirlos en la respuesta)
@@ -200,16 +202,18 @@ class VentasRepository:
     # Cotizaciones
     # ------------------------------------------------------------------
     async def next_numero_cotizacion(self, empresa_id: UUID) -> str:
-        year = await self.conn.fetchval("select extract(year from now())::int")
-        count = await self.conn.fetchval(
+        val = await self.conn.fetchval(
             """
-            select count(*) from public.cotizaciones
-             where empresa_id = $1
-               and extract(year from fecha) = $2
+            select format('COT-%s-%s',
+              extract(year from now())::int,
+              lpad((count(*) + 1)::text, 4, '0'))
+            from public.cotizaciones
+            where empresa_id = $1
+              and extract(year from fecha) = extract(year from now())
             """,
-            empresa_id, year,
+            empresa_id,
         )
-        return f"COT-{year}-{int(count) + 1:04d}"
+        return val
 
     async def crear_cotizacion(self, empresa_id: UUID, user_id: UUID | None, data: dict[str, Any]) -> dict[str, Any]:
         async with self.conn.transaction():
@@ -235,18 +239,23 @@ class VentasRepository:
                 user_id,
             )
             cot = dict(row)
-            for item in data.get("items", []):
-                await self.conn.execute(
+            if data.get("items"):
+                await self.conn.executemany(
                     """
                     insert into public.cotizaciones_items
                       (empresa_id, cotizacion_id, producto_id, sku, nombre,
                        cantidad, precio_unitario, descuento_pct, subtotal)
                     values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
                     """,
-                    empresa_id, cot["id"],
-                    item.get("producto_id"), item["sku"], item["nombre"],
-                    item["cantidad"], item["precio_unitario"],
-                    item.get("descuento_pct", 0), item["subtotal"],
+                    [
+                        (
+                            empresa_id, cot["id"],
+                            item.get("producto_id"), item["sku"], item["nombre"],
+                            item["cantidad"], item["precio_unitario"],
+                            item.get("descuento_pct", 0), item["subtotal"],
+                        )
+                        for item in data["items"]
+                    ],
                 )
         # Obtener ítems recién insertados
         items_cot = await self.conn.fetch(

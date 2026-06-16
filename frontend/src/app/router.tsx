@@ -26,6 +26,8 @@ const MovimientosPage   = lazy(() => import("@/modules/inventario/pages/Movimien
 // ── Ventas ───────────────────────────────────────────────────────────────────
 // TODO: conectar con módulo de ventas del backend
 const VentasPage        = lazy(() => import("@/modules/ventas/pages/VentasPage"));
+const NuevaVentaPage       = lazy(() => import("@/modules/ventas/pages/NuevaVentaPage"));
+const NuevaDevoluccionPage = lazy(() => import("@/modules/ventas/pages/NuevaDevoluccionPage"));
 const CajaPage          = lazy(() => import("@/modules/ventas/pages/CajaPage"));
 const ClientesPage      = lazy(() => import("@/modules/ventas/pages/ClientesPage"));
 const CotizacionesPage  = lazy(() => import("@/modules/ventas/pages/CotizacionesPage"));
@@ -133,6 +135,8 @@ const routes: RouteObject[] = [
             element: <RoleGuard permiso="ventas" />,
             children: [
               { path: "/ventas",                   element: <S><VentasPage /></S> },
+              { path: "/ventas/nueva",             element: <S><NuevaVentaPage /></S> },
+              { path: "/ventas/devoluciones/nueva", element: <S><NuevaDevoluccionPage /></S> },
               { path: "/ventas/clientes",          element: <S><ClientesPage /></S> },
               { path: "/ventas/cotizaciones",      element: <S><CotizacionesPage /></S> },
               { path: "/ventas/pagos",             element: <S><PagosPage /></S> },

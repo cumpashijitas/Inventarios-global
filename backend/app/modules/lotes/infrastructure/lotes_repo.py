@@ -76,9 +76,9 @@ class LotesRepository:
                 "delete from public.lotes_items where lote_id = $1 and empresa_id = $2",
                 lote_id, empresa_id,
             )
-            result = []
-            for item in items:
-                row = await self.conn.fetchrow(
+            # Batch insert en un solo round-trip
+            if items:
+                await self.conn.executemany(
                     """
                     insert into public.lotes_items
                       (empresa_id, lote_id, producto_id, sku, nombre, categoria, marca,
@@ -86,31 +86,28 @@ class LotesRepository:
                        cantidad, stock_minimo,
                        codigo_universal, procedencia, industria, motor, modelos, medidas, proveedor)
                     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
-                    returning *
                     """,
-                    empresa_id, lote_id,
-                    item.get("producto_id"),
-                    item["sku"],
-                    item["nombre"],
-                    item.get("categoria"),
-                    item.get("marca"),
-                    item.get("precio_real"),
-                    item.get("costo_caja"),
-                    item.get("precio_unitario"),
-                    item.get("precio_mayor"),
-                    item.get("precio_mecanico"),
-                    item.get("precio_mayorista"),
-                    item.get("cantidad", 0),
-                    item.get("stock_minimo", 0),
-                    item.get("codigo_universal"),
-                    item.get("procedencia"),
-                    item.get("industria"),
-                    item.get("motor"),
-                    item.get("modelos"),
-                    item.get("medidas"),
-                    item.get("proveedor"),
+                    [
+                        (
+                            empresa_id, lote_id,
+                            item.get("producto_id"), item["sku"], item["nombre"],
+                            item.get("categoria"), item.get("marca"),
+                            item.get("precio_real"), item.get("costo_caja"),
+                            item.get("precio_unitario"), item.get("precio_mayor"),
+                            item.get("precio_mecanico"), item.get("precio_mayorista"),
+                            item.get("cantidad", 0), item.get("stock_minimo", 0),
+                            item.get("codigo_universal"), item.get("procedencia"),
+                            item.get("industria"), item.get("motor"),
+                            item.get("modelos"), item.get("medidas"), item.get("proveedor"),
+                        )
+                        for item in items
+                    ],
                 )
-                result.append(dict(row))
+            result = await self.conn.fetch(
+                "select * from public.lotes_items where lote_id = $1 order by created_at",
+                lote_id,
+            )
+            result = [dict(r) for r in result]
 
             # Actualizar contador del lote
             await self.conn.execute(

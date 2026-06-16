@@ -78,6 +78,45 @@ class StockRepository:
             raise
         return mov_id
 
+    async def registrar_movimientos_batch(
+        self,
+        items: list[dict],
+        almacen_id: UUID,
+        referencia_tipo: str,
+        referencia_id: UUID,
+        motivo_prefix: str,
+        tipo: str = "salida",
+    ) -> list[UUID]:
+        """Registra N movimientos de stock en un solo round-trip usando la función batch."""
+        if not items:
+            return []
+        filtered = [i for i in items if i.get("producto_id")]
+        if not filtered:
+            return []
+        try:
+            ids = await self.conn.fetchval(
+                """
+                SELECT public.registrar_movimientos_stock_batch(
+                    $1::uuid[], $2::uuid[], $3::text[], $4::numeric[],
+                    $5::numeric[], $6::text[], $7::uuid[], $8::text[]
+                )
+                """,
+                [UUID(str(i["producto_id"])) for i in filtered],
+                [almacen_id] * len(filtered),
+                [tipo] * len(filtered),
+                [float(i["cantidad"]) for i in filtered],
+                [float(i.get("costo_unitario", 0)) for i in filtered],
+                [referencia_tipo] * len(filtered),
+                [referencia_id] * len(filtered),
+                [motivo_prefix] * len(filtered),
+            )
+        except Exception as e:
+            msg = str(e)
+            if "stock insuficiente" in msg.lower():
+                raise StockInsuficienteError("batch", str(almacen_id), 0.0) from e
+            raise
+        return ids or []
+
     async def listar_movimientos(
         self,
         producto_id: UUID | None,

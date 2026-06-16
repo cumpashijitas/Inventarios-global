@@ -83,19 +83,16 @@ class VentasUseCases:
 
         venta = await self.repo.crear_venta(empresa_id, user_id, data)
 
-        # Descontar stock por cada ítem con producto_id
-        for item in items:
-            if item.get("producto_id") and almacen_id:
-                await self.stock.registrar_movimiento(
-                    UUID(str(item["producto_id"])),
-                    almacen_id,
-                    "salida",
-                    item["cantidad"],
-                    item.get("costo_unitario", 0),
-                    "venta",
-                    venta["id"],
-                    f"Venta {venta['numero']}",
-                )
+        # Descontar stock en un solo round-trip
+        if almacen_id:
+            await self.stock.registrar_movimientos_batch(
+                items,
+                almacen_id,
+                "venta",
+                venta["id"],
+                f"Venta {venta['numero']}",
+                tipo="salida",
+            )
 
         # Registrar en caja si hay sesión abierta (sin interrumpir la venta si falla)
         try:
@@ -139,21 +136,17 @@ class VentasUseCases:
         venta = await self.repo.get_venta(venta_id)
         resultado = await self.repo.anular_venta(venta_id, motivo, user_id)
 
-        # Devolver stock
+        # Devolver stock en un solo round-trip
         almacen_id = venta.get("almacen_id")
         if almacen_id:
-            for item in venta.get("items", []):
-                if item.get("producto_id"):
-                    await self.stock.registrar_movimiento(
-                        UUID(str(item["producto_id"])),
-                        UUID(str(almacen_id)),
-                        "entrada",
-                        item["cantidad"],
-                        item.get("costo_unitario", 0),
-                        "devolucion",
-                        venta_id,
-                        f"Anulación venta {venta['numero']}",
-                    )
+            await self.stock.registrar_movimientos_batch(
+                venta.get("items", []),
+                UUID(str(almacen_id)),
+                "devolucion",
+                venta_id,
+                f"Anulación venta {venta['numero']}",
+                tipo="entrada",
+            )
 
         await registrar_auditoria(
             self.conn,

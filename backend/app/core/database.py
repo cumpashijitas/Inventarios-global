@@ -40,7 +40,7 @@ async def init_pool() -> None:
         dsn=settings.database_url,
         min_size=settings.database_pool_min,
         max_size=settings.database_pool_max,
-        command_timeout=30,
+        command_timeout=10,
         server_settings={
             "application_name": settings.app_name,
             "jit": "off",  # más rápido para queries simples y predecibles
@@ -78,12 +78,15 @@ async def acquire_tenant_conn(
     pool = get_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():
-            await conn.execute(
-                "SELECT set_config('app.current_empresa_id', $1, true)", empresa_id
-            )
             if user_id:
                 await conn.execute(
-                    "SELECT set_config('app.current_user_id', $1, true)", user_id
+                    "SELECT set_config('app.current_empresa_id',$1,true),"
+                    "       set_config('app.current_user_id',$2,true)",
+                    empresa_id, user_id,
+                )
+            else:
+                await conn.execute(
+                    "SELECT set_config('app.current_empresa_id',$1,true)", empresa_id
                 )
             yield conn
 
