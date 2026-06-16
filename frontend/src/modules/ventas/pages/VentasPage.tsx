@@ -762,7 +762,7 @@ export default function VentasPage() {
           {tab === "ventas" && (
             <div className="overflow-x-auto">
               {ventas.length === 0 ? (
-                <EmptyTab icon={<ShoppingCart className="h-10 w-10 mb-3" />} label="Aún no hay ventas" action={<Button onClick={() => { resetForm(); setModalVenta(true); }} className="mt-4 bg-slate-800 text-white text-sm"><Plus className="h-4 w-4 mr-1" />Primera venta</Button>} />
+                <EmptyTab icon={<ShoppingCart className="h-10 w-10 mb-3" />} label="Aún no hay ventas" action={<Button onClick={() => navigate("/ventas/nueva")} className="mt-4 bg-slate-800 text-white text-sm"><Plus className="h-4 w-4 mr-1" />Primera venta</Button>} />
               ) : (
                 <>
                   <div className="border-b border-slate-100 px-4 py-2">
@@ -848,7 +848,7 @@ export default function VentasPage() {
               </div>
 
               {cotsFiltradas.length === 0 ? (
-                <EmptyTab icon={<FileText className="h-10 w-10 mb-3" />} label="No hay cotizaciones" action={<Button onClick={() => { resetForm(); setModalCot(true); }} className="mt-4 bg-slate-700 text-white text-sm"><Plus className="h-4 w-4 mr-1" />Nueva cotización</Button>} />
+                <EmptyTab icon={<FileText className="h-10 w-10 mb-3" />} label="No hay cotizaciones" action={<Button onClick={() => navigate("/ventas/nueva?modo=cotizacion")} className="mt-4 bg-slate-700 text-white text-sm"><Plus className="h-4 w-4 mr-1" />Nueva cotización</Button>} />
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse [&_td]:border [&_td]:border-slate-200">
