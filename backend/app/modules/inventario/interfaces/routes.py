@@ -9,9 +9,13 @@ from uuid import UUID
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
+from app.core.cache import TTLCache
 from app.core.config import settings
 from app.core.database import acquire_tenant_conn
 from app.core.deps import TenantContext, get_tenant_context, require_modulo
+
+# Cache de 5 minutos para listas que raramente cambian
+_cache = TTLCache(ttl=300)
 from app.modules.inventario.application.almacenes_uc import AlmacenesUseCases
 from app.modules.inventario.application.clientes_uc import ClientesUseCases
 from app.modules.inventario.application.productos_uc import ProductosUseCases
@@ -208,10 +212,16 @@ async def listar_almacenes(
     only_active: bool = Query(True),
     ctx: TenantContext = Depends(get_tenant_context),
 ) -> list[AlmacenOut]:
+    key = f"almacenes:{ctx.empresa_id}:{only_active}"
+    cached = _cache.get(key)
+    if cached is not None:
+        return cached
     async with acquire_tenant_conn(ctx.empresa_id, ctx.user_id) as conn:
         uc = AlmacenesUseCases(conn)
         items = await uc.listar(UUID(ctx.empresa_id), only_active)
-    return [AlmacenOut(**a) for a in items]
+    result = [AlmacenOut(**a) for a in items]
+    _cache.set(key, result)
+    return result
 
 
 @router.post("/almacenes", response_model=AlmacenOut, status_code=status.HTTP_201_CREATED)
@@ -219,6 +229,7 @@ async def crear_almacen(
     body: AlmacenIn,
     ctx: TenantContext = Depends(get_tenant_context),
 ) -> AlmacenOut:
+    _cache.delete_prefix(f"almacenes:{ctx.empresa_id}")
     async with acquire_tenant_conn(ctx.empresa_id, ctx.user_id) as conn:
         uc = AlmacenesUseCases(conn)
         created = await uc.crear(UUID(ctx.empresa_id), UUID(ctx.user_id), body.model_dump())
@@ -385,6 +396,10 @@ async def listar_categorias(
     only_active: bool = Query(True),
     ctx: TenantContext = Depends(get_tenant_context),
 ) -> list[CategoriaOut]:
+    key = f"categorias:{ctx.empresa_id}:{only_active}"
+    cached = _cache.get(key)
+    if cached is not None:
+        return cached
     async with acquire_tenant_conn(ctx.empresa_id, ctx.user_id) as conn:
         rows = await conn.fetch(
             """
@@ -397,7 +412,9 @@ async def listar_categorias(
             UUID(ctx.empresa_id),
             only_active,
         )
-    return [CategoriaOut(**dict(r)) for r in rows]
+    result = [CategoriaOut(**dict(r)) for r in rows]
+    _cache.set(key, result)
+    return result
 
 
 @router.post("/categorias", response_model=CategoriaOut, status_code=status.HTTP_201_CREATED)
@@ -405,6 +422,7 @@ async def crear_categoria(
     body: CategoriaIn,
     ctx: TenantContext = Depends(get_tenant_context),
 ) -> CategoriaOut:
+    _cache.delete_prefix(f"categorias:{ctx.empresa_id}")
     async with acquire_tenant_conn(ctx.empresa_id, ctx.user_id) as conn:
         row = await conn.fetchrow(
             """
@@ -451,6 +469,7 @@ async def actualizar_categoria(
         )
     if not row:
         raise HTTPException(status_code=404, detail="Categoría no encontrada")
+    _cache.delete_prefix(f"categorias:{ctx.empresa_id}")
     return CategoriaOut(**dict(row))
 
 
@@ -473,6 +492,7 @@ async def eliminar_categoria(
         )
     if result == "UPDATE 0":
         raise HTTPException(status_code=404, detail="Categoría no encontrada")
+    _cache.delete_prefix(f"categorias:{ctx.empresa_id}")
 
 
 # ----------------------------- Unidades de Medida -----------------------------
@@ -481,6 +501,10 @@ async def listar_unidades(
     only_active: bool = Query(True),
     ctx: TenantContext = Depends(get_tenant_context),
 ) -> list[UnidadMedidaOut]:
+    key = f"unidades:{ctx.empresa_id}:{only_active}"
+    cached = _cache.get(key)
+    if cached is not None:
+        return cached
     async with acquire_tenant_conn(ctx.empresa_id, ctx.user_id) as conn:
         rows = await conn.fetch(
             """
@@ -493,4 +517,6 @@ async def listar_unidades(
             UUID(ctx.empresa_id),
             only_active,
         )
-    return [UnidadMedidaOut(**dict(r)) for r in rows]
+    result = [UnidadMedidaOut(**dict(r)) for r in rows]
+    _cache.set(key, result)
+    return result

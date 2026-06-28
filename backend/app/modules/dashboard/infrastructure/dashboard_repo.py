@@ -1,4 +1,4 @@
-"""Repositorio del dashboard (queries de resumen en tiempo real)."""
+"""Repositorio del dashboard — todas las stats en una sola query CTE."""
 from __future__ import annotations
 
 import json
@@ -8,7 +8,6 @@ from uuid import UUID
 import asyncpg
 
 
-# ─── Mapeo de labels para actividad ──────────────────────────────────────────
 _TITULOS: dict[str, str] = {
     "venta.crear":                "Nueva venta registrada",
     "venta.anular":               "Venta anulada",
@@ -37,7 +36,6 @@ _DIAS_ES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 
 
 def _safe_payload(raw: Any) -> dict:
-    """Extrae dict del payload sea jsonb o str."""
     if raw is None:
         return {}
     if isinstance(raw, dict):
@@ -50,10 +48,7 @@ def _safe_payload(raw: Any) -> dict:
     return {}
 
 
-def _build_descripcion(
-    entidad: str, accion: str, payload: dict, extra_nombre: str | None
-) -> str:
-    """Construye la línea de descripción para mostrar en el feed."""
+def _build_descripcion(entidad: str, accion: str, payload: dict, extra_nombre: str | None) -> str:
     key = f"{entidad}.{accion}"
     p = payload
     nombre = extra_nombre or ""
@@ -138,177 +133,156 @@ class DashboardRepository:
         self.conn = conn
 
     async def stats(self, empresa_id: UUID) -> dict[str, Any]:
-        # ── Stats del día ────────────────────────────────────────────────────
-        hoy = await self.conn.fetchrow(
+        # Una sola query CTE que reemplaza las 5 queries secuenciales anteriores.
+        # Bolivia→Ohio = ~200ms RTT; 5 queries → 1000ms, 1 query → 200ms.
+        row = await self.conn.fetchrow(
             """
-            select
-              coalesce(sum(total), 0) as ventas_hoy,
-              count(*)               as ordenes_hoy
-            from public.ventas
-            where empresa_id = $1
-              and fecha = current_date
-              and estado = 'completada'
-            """,
-            empresa_id,
-        )
-
-        # ── Ventas semana Lun–Sáb (siempre 6 barras aunque no haya ventas) ──
-        semana = await self.conn.fetch(
-            """
-            with dias as (
-              select gs::date as fecha
-              from generate_series(
-                date_trunc('week', current_date)::date,
-                date_trunc('week', current_date)::date + interval '5 days',
-                interval '1 day'
-              ) gs
+            WITH
+            hoy AS (
+              SELECT
+                coalesce(sum(total), 0) AS ventas_hoy,
+                count(*)               AS ordenes_hoy
+              FROM public.ventas
+              WHERE empresa_id = $1
+                AND fecha = current_date
+                AND estado = 'completada'
             ),
-            v as (
-              select fecha, coalesce(sum(total), 0) as total
-              from public.ventas
-              where empresa_id = $1
-                and fecha between date_trunc('week', current_date)::date
-                              and date_trunc('week', current_date)::date + interval '5 days'
-                and estado = 'completada'
-              group by fecha
+            semana AS (
+              SELECT
+                d.fecha,
+                coalesce(sum(v.total), 0) AS total
+              FROM (
+                SELECT gs::date AS fecha
+                FROM generate_series(
+                  date_trunc('week', current_date)::date,
+                  date_trunc('week', current_date)::date + interval '5 days',
+                  interval '1 day'
+                ) gs
+              ) d
+              LEFT JOIN public.ventas v
+                ON v.fecha = d.fecha
+               AND v.empresa_id = $1
+               AND v.estado = 'completada'
+              GROUP BY d.fecha
+              ORDER BY d.fecha
+            ),
+            inventario AS (
+              SELECT
+                count(DISTINCT p.id)                                              AS total_productos,
+                count(DISTINCT CASE WHEN sa.cantidad <= p.stock_minimo
+                                     AND sa.cantidad >= 0 THEN p.id END)         AS stock_bajo
+              FROM public.productos p
+              LEFT JOIN public.stock_actual sa
+                ON sa.producto_id = p.id AND sa.empresa_id = p.empresa_id
+              WHERE p.empresa_id = $1 AND p.deleted_at IS NULL AND p.activo = TRUE
+            ),
+            categorias AS (
+              SELECT
+                coalesce(c.nombre, 'Sin categoría') AS categoria,
+                count(p.id)                          AS cantidad,
+                coalesce(sum(sa.cantidad * p.precio_venta), 0) AS valor
+              FROM public.productos p
+              LEFT JOIN public.categorias c ON c.id = p.categoria_id
+              LEFT JOIN public.stock_actual sa ON sa.producto_id = p.id
+              WHERE p.empresa_id = $1 AND p.deleted_at IS NULL
+              GROUP BY c.nombre
+              ORDER BY valor DESC
+              LIMIT 5
+            ),
+            actividad AS (
+              SELECT
+                a.id,
+                a.modulo,
+                a.entidad,
+                a.accion,
+                a.payload_despues,
+                a.created_at,
+                coalesce(ue.nombre, 'Sistema') AS usuario_nombre,
+                CASE
+                  WHEN a.entidad = 'venta'            THEN v.cliente_nombre
+                  WHEN a.entidad = 'movimiento_stock' THEN p.nombre
+                  WHEN a.entidad = 'cliente'          THEN cli.nombre
+                  WHEN a.entidad = 'proveedor'        THEN prov.razon_social
+                  ELSE NULL
+                END AS extra_nombre
+              FROM public.auditoria a
+              LEFT JOIN public.usuarios_empresa ue
+                ON ue.user_id = a.user_id AND ue.empresa_id = a.empresa_id
+              LEFT JOIN public.ventas v
+                ON a.entidad = 'venta' AND v.id = a.entidad_id
+              LEFT JOIN public.movimientos_stock ms
+                ON a.entidad = 'movimiento_stock' AND ms.id = a.entidad_id
+              LEFT JOIN public.productos p ON p.id = ms.producto_id
+              LEFT JOIN public.clientes cli
+                ON a.entidad = 'cliente' AND cli.id = a.entidad_id
+              LEFT JOIN public.proveedores prov
+                ON a.entidad = 'proveedor' AND prov.id = a.entidad_id
+              WHERE a.empresa_id = $1
+              ORDER BY a.created_at DESC
+              LIMIT 20
             )
-            select d.fecha, coalesce(v.total, 0) as total
-            from dias d
-            left join v on v.fecha = d.fecha
-            order by d.fecha
+            SELECT
+              (SELECT row_to_json(h) FROM hoy h)          AS hoy,
+              (SELECT json_agg(s ORDER BY s.fecha) FROM semana s) AS semana,
+              (SELECT row_to_json(i) FROM inventario i)   AS inventario,
+              (SELECT json_agg(c) FROM categorias c)      AS categorias,
+              (SELECT json_agg(a) FROM actividad a)       AS actividad
             """,
             empresa_id,
         )
 
-        # ── Inventario ───────────────────────────────────────────────────────
-        inventario = await self.conn.fetchrow(
-            """
-            select
-              count(distinct p.id)                                           as total_productos,
-              count(distinct case when sa.cantidad <= p.stock_minimo
-                                   and sa.cantidad >= 0 then p.id end)      as stock_bajo
-            from public.productos p
-            left join public.stock_actual sa
-              on sa.producto_id = p.id and sa.empresa_id = p.empresa_id
-            where p.empresa_id = $1 and p.deleted_at is null and p.activo = true
-            """,
-            empresa_id,
-        )
+        hoy_data       = json.loads(row["hoy"])       if isinstance(row["hoy"], str)       else (row["hoy"] or {})
+        inventario_data= json.loads(row["inventario"])if isinstance(row["inventario"], str) else (row["inventario"] or {})
 
-        # ── Distribución por categoría (top 5) ───────────────────────────────
-        categorias = await self.conn.fetch(
-            """
-            select c.nombre as categoria,
-                   count(p.id) as cantidad,
-                   coalesce(sum(sa.cantidad * p.precio_venta), 0) as valor
-            from public.productos p
-            left join public.categorias c on c.id = p.categoria_id
-            left join public.stock_actual sa on sa.producto_id = p.id
-            where p.empresa_id = $1 and p.deleted_at is null
-            group by c.nombre
-            order by valor desc
-            limit 5
-            """,
-            empresa_id,
-        )
+        def _parse_json_list(val: Any) -> list:
+            if val is None:
+                return []
+            if isinstance(val, str):
+                return json.loads(val)
+            return val
 
-        # ── Actividad reciente desde tabla auditoria ──────────────────────────
-        actividad = await self._actividad_reciente(empresa_id, limit=20)
+        semana_raw    = _parse_json_list(row["semana"])
+        categorias_raw= _parse_json_list(row["categorias"])
+        actividad_raw = _parse_json_list(row["actividad"])
 
-        return {
-            "ventas_hoy":    float(hoy["ventas_hoy"]  if hoy else 0),
-            "ordenes_hoy":   int(hoy["ordenes_hoy"]   if hoy else 0),
-            "total_productos": int(inventario["total_productos"] if inventario else 0),
-            "stock_bajo":    int(inventario["stock_bajo"]       if inventario else 0),
-            "ventas_semana": [
-                {
-                    "dia":   _DIAS_ES[r["fecha"].weekday()],
-                    "fecha": str(r["fecha"]),
-                    "total": float(r["total"]),
-                }
-                for r in semana
-            ],
-            "categorias": [
-                {
-                    "nombre":   r["categoria"] or "Sin categoría",
-                    "cantidad": int(r["cantidad"]),
-                    "valor":    float(r["valor"]),
-                }
-                for r in categorias
-            ],
-            "actividad_reciente": actividad,
-        }
-
-    async def _actividad_reciente(
-        self, empresa_id: UUID, limit: int = 20
-    ) -> list[dict[str, Any]]:
-        rows = await self.conn.fetch(
-            """
-            select
-              a.id,
-              a.modulo,
-              a.entidad,
-              a.accion,
-              a.payload_despues,
-              a.created_at,
-              -- Nombre del usuario desde usuarios_empresa
-              coalesce(ue.nombre, 'Sistema') as usuario_nombre,
-              -- Nombre extra según la entidad (para descripciones)
-              case
-                when a.entidad = 'venta'           then v.cliente_nombre
-                when a.entidad = 'movimiento_stock' then p.nombre
-                when a.entidad = 'cliente'          then cli.nombre
-                when a.entidad = 'proveedor'        then prov.razon_social
-                else null
-              end as extra_nombre
-            from public.auditoria a
-            -- Nombre del usuario (ambas columnas son uuid)
-            left join public.usuarios_empresa ue
-              on ue.user_id   = a.user_id
-             and ue.empresa_id = a.empresa_id
-            -- Datos de venta (entidad_id es uuid en auditoria)
-            left join public.ventas v
-              on a.entidad = 'venta'
-             and v.id = a.entidad_id
-            -- Datos de movimiento_stock → producto
-            left join public.movimientos_stock ms
-              on a.entidad = 'movimiento_stock'
-             and ms.id = a.entidad_id
-            left join public.productos p
-              on p.id = ms.producto_id
-            -- Datos de cliente
-            left join public.clientes cli
-              on a.entidad = 'cliente'
-             and cli.id = a.entidad_id
-            -- Datos de proveedor
-            left join public.proveedores prov
-              on a.entidad = 'proveedor'
-             and prov.id = a.entidad_id
-            where a.empresa_id = $1
-            order by a.created_at desc
-            limit $2
-            """,
-            empresa_id,
-            limit,
-        )
-
-        result = []
-        for r in rows:
-            entidad    = r["entidad"]
-            accion     = r["accion"]
-            tipo       = f"{entidad}.{accion}"
-            payload    = _safe_payload(r["payload_despues"])
-            extra      = r["extra_nombre"]
-
+        actividad_result = []
+        for r in actividad_raw:
+            entidad     = r.get("entidad", "")
+            accion      = r.get("accion", "")
+            tipo        = f"{entidad}.{accion}"
+            payload     = _safe_payload(r.get("payload_despues"))
+            extra       = r.get("extra_nombre")
             titulo      = _TITULOS.get(tipo) or f"{entidad.replace('_', ' ').title()} — {accion}"
             descripcion = _build_descripcion(entidad, accion, payload, extra)
-
-            result.append({
+            actividad_result.append({
                 "id":             str(r["id"]),
                 "tipo":           tipo,
                 "titulo":         titulo,
                 "descripcion":    descripcion or None,
-                "usuario_nombre": r["usuario_nombre"],
-                "created_at":     r["created_at"].isoformat(),
+                "usuario_nombre": r.get("usuario_nombre", "Sistema"),
+                "created_at":     r.get("created_at"),
             })
-        return result
+
+        return {
+            "ventas_hoy":      float(hoy_data.get("ventas_hoy", 0)),
+            "ordenes_hoy":     int(hoy_data.get("ordenes_hoy", 0)),
+            "total_productos": int(inventario_data.get("total_productos", 0)),
+            "stock_bajo":      int(inventario_data.get("stock_bajo", 0)),
+            "ventas_semana": [
+                {
+                    "dia":   _DIAS_ES[__import__("datetime").date.fromisoformat(r["fecha"]).weekday()],
+                    "fecha": r["fecha"],
+                    "total": float(r.get("total", 0)),
+                }
+                for r in semana_raw
+            ],
+            "categorias": [
+                {
+                    "nombre":   r.get("categoria") or "Sin categoría",
+                    "cantidad": int(r.get("cantidad", 0)),
+                    "valor":    float(r.get("valor", 0)),
+                }
+                for r in categorias_raw
+            ],
+            "actividad_reciente": actividad_result,
+        }
