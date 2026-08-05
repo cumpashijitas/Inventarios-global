@@ -22,12 +22,16 @@ router = APIRouter(
 async def reporte_ventas(
     desde: date = Query(...),
     hasta: date = Query(...),
+    search: str | None = Query(None),
     ctx: TenantContext = Depends(get_tenant_context),
 ) -> dict:
     async with acquire_tenant_conn(ctx.empresa_id, ctx.user_id) as conn:
         repo = ReportesRepository(conn)
         resumen = await repo.resumen_ventas(UUID(ctx.empresa_id), desde, hasta)
-        top_productos = await repo.top_productos(UUID(ctx.empresa_id), desde, hasta)
+        top_productos = await repo.top_productos(
+            UUID(ctx.empresa_id), desde, hasta,
+            limit=100 if search else 10, search=search,
+        )
         por_dia = await repo.ventas_por_dia(UUID(ctx.empresa_id), desde, hasta)
     return {
         "periodo": {"desde": str(desde), "hasta": str(hasta)},

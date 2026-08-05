@@ -36,9 +36,11 @@ class ProductosUseCases:
         page_size: int,
         search: str | None,
         only_active: bool = False,
+        solo_bajo_stock: bool = False,
+        ordenar_por_ventas: bool = False,
     ) -> dict[str, Any]:
         items, total = await self.repo.list_paginated(
-            empresa_id, page, page_size, search, only_active
+            empresa_id, page, page_size, search, only_active, solo_bajo_stock, ordenar_por_ventas
         )
         return {
             "items": items,

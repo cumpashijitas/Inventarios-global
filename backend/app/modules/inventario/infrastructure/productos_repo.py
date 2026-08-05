@@ -29,6 +29,8 @@ class ProductosRepository:
         page_size: int,
         search: str | None,
         only_active: bool = False,
+        solo_bajo_stock: bool = False,
+        ordenar_por_ventas: bool = False,
     ) -> tuple[list[dict[str, Any]], int]:
         offset = (page - 1) * page_size
         where_clauses = ["p.empresa_id = $1", "p.deleted_at is null"]
@@ -37,9 +39,14 @@ class ProductosRepository:
         if only_active:
             where_clauses.append("p.activo = true")
 
+        if solo_bajo_stock:
+            where_clauses.append(
+                "p.controla_stock = true and coalesce(s.stock_total, 0) <= p.stock_minimo"
+            )
+
         if search and search.strip():
             for token in search.strip().lower().split():
-                params.append(f"%{token}%")
+                params.append(f"{token}%")
                 n = len(params)
                 where_clauses.append(
                     f"(lower(p.nombre) like ${n} or lower(p.sku) like ${n}"
@@ -55,13 +62,31 @@ class ProductosRepository:
                 )
 
         where = " and ".join(where_clauses)
+        stock_join = """
+              left join (
+                select producto_id, sum(cantidad) as stock_total
+                  from public.stock_actual
+                 group by producto_id
+              ) s on s.producto_id = p.id
+        """
+        ventas_join = """
+              left join (
+                select vi.producto_id, sum(vi.cantidad) as vendidos
+                  from public.ventas_items vi
+                  join public.ventas v on v.id = vi.venta_id
+                 where v.empresa_id = $1 and v.estado = 'completada'
+                 group by vi.producto_id
+              ) vt on vt.producto_id = p.id
+        """
+        joins = stock_join + ventas_join
+        order_by = "coalesce(vt.vendidos, 0) desc, p.nombre" if ordenar_por_ventas else "p.nombre"
 
-        # Total
+        # Total — incluye los joins porque el filtro de bajo stock los necesita
         total = await self.conn.fetchval(
-            f"select count(*) from public.productos p where {where}", *params
+            f"select count(*) from public.productos p {joins} where {where}", *params
         )
 
-        # Página — incluye stock_total sumado de todos los almacenes
+        # Página — incluye stock_total sumado de todos los almacenes y unidades vendidas
         params.extend([page_size, offset])
         rows = await self.conn.fetch(
             f"""
@@ -72,15 +97,12 @@ class ProductosRepository:
                    p.peso, p.modelos, p.anio_desde, p.anio_hasta, p.ubicacion,
                    p.codigo_universal, p.procedencia, p.costo_caja, p.industria, p.motor, p.precio_real,
                    p.created_at, p.updated_at,
-                   coalesce(s.stock_total, 0) as stock_total
+                   coalesce(s.stock_total, 0) as stock_total,
+                   coalesce(vt.vendidos, 0) as vendidos
               from public.productos p
-              left join (
-                select producto_id, sum(cantidad) as stock_total
-                  from public.stock_actual
-                 group by producto_id
-              ) s on s.producto_id = p.id
+              {joins}
              where {where}
-             order by p.nombre
+             order by {order_by}
              limit ${len(params) - 1} offset ${len(params)}
             """,
             *params,

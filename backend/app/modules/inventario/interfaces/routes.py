@@ -58,11 +58,16 @@ async def listar_productos(
     page_size: int = Query(25, ge=1, le=200),
     search: str | None = Query(None),
     only_active: bool = Query(False),
+    solo_bajo_stock: bool = Query(False),
+    ordenar_por_ventas: bool = Query(False),
     ctx: TenantContext = Depends(get_tenant_context),
 ) -> PageOut:
     async with acquire_tenant_conn(ctx.empresa_id, ctx.user_id) as conn:
         uc = ProductosUseCases(conn)
-        result = await uc.listar(UUID(ctx.empresa_id), page, page_size, search, only_active)
+        result = await uc.listar(
+            UUID(ctx.empresa_id), page, page_size, search, only_active,
+            solo_bajo_stock, ordenar_por_ventas,
+        )
     return PageOut(**result)
 
 

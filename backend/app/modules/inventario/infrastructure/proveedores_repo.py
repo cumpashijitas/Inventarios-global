@@ -28,7 +28,7 @@ class ProveedoresRepository:
         if only_active:
             clauses.append("activo = true")
         if search and search.strip():
-            params.append(f"%{search.strip().lower()}%")
+            params.append(f"{search.strip().lower()}%")
             clauses.append(
                 f"(lower(razon_social) like ${len(params)} or lower(email) like ${len(params)})"
             )

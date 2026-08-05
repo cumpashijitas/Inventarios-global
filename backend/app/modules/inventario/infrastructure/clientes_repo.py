@@ -28,7 +28,7 @@ class ClientesRepository:
         if tipo:
             params.append(tipo); clauses.append(f"tipo = ${len(params)}")
         if search and search.strip():
-            params.append(f"%{search.strip().lower()}%")
+            params.append(f"{search.strip().lower()}%")
             clauses.append(
                 f"(lower(nombre) like ${len(params)} or lower(email::text) like ${len(params)})"
             )

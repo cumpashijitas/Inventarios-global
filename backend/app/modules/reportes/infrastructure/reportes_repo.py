@@ -133,23 +133,35 @@ class ReportesRepository:
         return [dict(r) for r in rows], int(total)
 
     async def top_productos(
-        self, empresa_id: UUID, desde: date, hasta: date, limit: int = 10
+        self,
+        empresa_id: UUID,
+        desde: date,
+        hasta: date,
+        limit: int = 10,
+        search: str | None = None,
     ) -> list[dict[str, Any]]:
+        where = ["v.empresa_id = $1", "v.fecha between $2 and $3", "v.estado = 'completada'"]
+        params: list[Any] = [empresa_id, desde, hasta]
+
+        if search and search.strip():
+            params.append(f"{search.strip().lower()}%")
+            n = len(params)
+            where.append(f"(lower(vi.nombre) like ${n} or lower(vi.sku) like ${n})")
+
+        params.append(limit)
         rows = await self.conn.fetch(
-            """
+            f"""
             select vi.sku, vi.nombre,
                    sum(vi.cantidad) as cantidad_vendida,
                    sum(vi.subtotal) as total_vendido
               from public.ventas_items vi
               join public.ventas v on v.id = vi.venta_id
-             where v.empresa_id = $1
-               and v.fecha between $2 and $3
-               and v.estado = 'completada'
+             where {" and ".join(where)}
              group by vi.sku, vi.nombre
              order by total_vendido desc
-             limit $4
+             limit ${len(params)}
             """,
-            empresa_id, desde, hasta, limit,
+            *params,
         )
         return [dict(r) for r in rows]
 
