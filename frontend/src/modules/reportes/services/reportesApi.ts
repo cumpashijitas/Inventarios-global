@@ -7,8 +7,10 @@ import type {
 } from "@/shared/types/api";
 
 export const reportesApi = {
-  getVentas: async (desde: string, hasta: string): Promise<ReporteVentas> => {
-    const r = await api.get<ReporteVentas>("/reportes/ventas", { params: { desde, hasta } });
+  getVentas: async (desde: string, hasta: string, search?: string): Promise<ReporteVentas> => {
+    const r = await api.get<ReporteVentas>("/reportes/ventas", {
+      params: { desde, hasta, search: search || undefined },
+    });
     return r.data;
   },
 

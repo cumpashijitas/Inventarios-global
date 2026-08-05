@@ -43,6 +43,8 @@ interface ListParams {
 }
 interface ListProductosParams extends ListParams {
   only_active?: boolean;
+  solo_bajo_stock?: boolean;
+  ordenar_por_ventas?: boolean;
 }
 interface ListProveedoresParams extends ListParams {
   only_active?: boolean;

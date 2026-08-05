@@ -1,5 +1,5 @@
 import { Boxes, Pencil, Plus, Search, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AjusteStockModal } from "@/modules/inventario/components/AjusteStockModal";
 import { ProductoForm } from "@/modules/inventario/components/ProductoForm";
@@ -25,9 +25,13 @@ import { formatMoney } from "@/shared/lib/format";
 import type { Producto, ProductoIn } from "@/shared/types/api";
 
 export default function ProductosPage() {
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => parseInt(sessionStorage.getItem("inventario:page") ?? "1", 10));
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
+
+  useEffect(() => {
+    sessionStorage.setItem("inventario:page", String(page));
+  }, [page]);
 
   const { data, isLoading } = useProductos({
     page,

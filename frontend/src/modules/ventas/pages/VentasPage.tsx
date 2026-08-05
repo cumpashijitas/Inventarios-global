@@ -16,7 +16,7 @@ import { Label } from "@/shared/components/ui/label";
 import { authApi } from "@/modules/auth/services/authApi";
 import { inventarioApi } from "@/modules/inventario/services/inventarioApi";
 import { ventasApi, type TopProducto } from "@/modules/ventas/services/ventasApi";
-import type { Cliente, Cotizacion, EmpresaPerfil, Producto, Venta, VentaIn } from "@/shared/types/api";
+import type { Cliente, Cotizacion, EmpresaPerfil, Producto, Venta } from "@/shared/types/api";
 import { fmtBs } from "@/shared/utils/format";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -395,11 +395,9 @@ export default function VentasPage() {
   const [loading, setLoading]           = useState(true);
 
   // Modales
-  const [modalVenta, setModalVenta]       = useState(false);
   const [modalCot, setModalCot]           = useState(false);
   const [modalRecibo, setModalRecibo]     = useState<Venta | null>(null);
   const [modalVerCot, setModalVerCot]     = useState<Cotizacion | null>(null);
-  const [cotizacionOrigen, setCotizacionOrigen] = useState<Cotizacion | null>(null);
 
   // Buscadores de tabla
   const [busqVentas, setBusqVentas] = useState("");
@@ -411,8 +409,6 @@ export default function VentasPage() {
   const [clienteId, setClienteId]           = useState<string | null>(null);
   const [clienteTipo, setClienteTipo]       = useState<string | null>(null);
   const [clienteDescuento, setClienteDescuento] = useState(0);
-  const [metodoPago, setMetodoPago]         = useState<VentaIn["metodo_pago"]>("efectivo");
-  const [montoPagado, setMontoPagado]       = useState("");
   const [notas, setNotas]                   = useState("");
   const [cart, setCart]                     = useState<CartItem[]>([]);
   const [saving, setSaving]                 = useState(false);
@@ -423,7 +419,6 @@ export default function VentasPage() {
     const dt = new Date(d); dt.setDate(dt.getDate() + n);
     return dt.toISOString().slice(0, 10);
   };
-  const [fechaVenta, setFechaVenta] = useState(todayStr);
   const [fechaCot,   setFechaCot]   = useState(todayStr);
   const [fechaVence, setFechaVence] = useState(() => addDays(todayStr(), 7));
 
@@ -548,42 +543,8 @@ export default function VentasPage() {
     const hoy = todayStr();
     setCart([]); setBusqueda(""); setClienteNombre(""); setClienteId(null);
     setClienteTipo(null); setClienteDescuento(0); setNotas("");
-    setMontoPagado(""); setCotizacionOrigen(null);
-    setFechaVenta(hoy);
     setFechaCot(hoy);
     setFechaVence(addDays(hoy, 7));
-  };
-
-  // ── Crear venta ────────────────────────────────────────────────────────────
-  const handleProcesarVenta = async () => {
-    if (cart.length === 0) return;
-    setSaving(true);
-    try {
-      const body: VentaIn = {
-        cliente_id: clienteId ?? undefined,
-        cliente_nombre: clienteNombre || undefined,
-        fecha: fechaVenta,
-        metodo_pago: metodoPago,
-        descuento_pct: clienteDescuento > 0 ? clienteDescuento : undefined,
-        monto_pagado: montoPagado ? parseFloat(montoPagado) : cartTotal,
-        notas: notas || undefined,
-        items: cart.map((i) => ({
-          producto_id: i.id, sku: i.sku, nombre: i.nombre,
-          cantidad: i.cantidad, precio_unitario: i.precio,
-        })),
-      };
-      const venta = await ventasApi.createVenta(body);
-      // Si viene de una cotización, marcarla como convertida
-      if (cotizacionOrigen) {
-        await ventasApi.cambiarEstadoCotizacion(cotizacionOrigen.id, "convertida");
-      }
-      await cargarVentas();
-      await cargarCotizaciones();
-      setModalVenta(false);
-      resetForm();
-      setModalRecibo(venta);  // Mostrar recibo inmediatamente
-    } catch (err) { console.error(err); alert("Error al procesar la venta."); }
-    finally { setSaving(false); }
   };
 
   // ── Crear cotización ───────────────────────────────────────────────────────
@@ -613,28 +574,6 @@ export default function VentasPage() {
       setModalVerCot(cot); // Ver la cotización recién creada
     } catch (err) { console.error(err); alert("Error al guardar cotización."); }
     finally { setSaving(false); }
-  };
-
-  // ── Convertir cotización a venta ───────────────────────────────────────────
-  const convertirACotizacion = (cot: Cotizacion) => {
-    resetForm();
-    setCotizacionOrigen(cot);
-    setClienteNombre(cot.cliente_nombre ?? "");
-    if (cot.cliente_id) setClienteId(cot.cliente_id);
-    if (cot.cliente_tipo) setClienteTipo(cot.cliente_tipo);
-    // Buscar cliente para obtener su descuento
-    const cli = clientes.find((c) => c.id === cot.cliente_id);
-    if (cli) setClienteDescuento(parseFloat(cli.descuento_pct) || 0);
-    // Pre-llenar carrito con los ítems de la cotización
-    setCart(cot.items.map((it) => ({
-      id: it.producto_id ?? it.id,
-      sku: it.sku,
-      nombre: it.nombre,
-      precio: parseFloat(it.precio_unitario),
-      cantidad: Math.round(parseFloat(it.cantidad)),
-      stock: 0,
-    })));
-    setModalVenta(true);
   };
 
   // ── Cambiar estado cotización ──────────────────────────────────────────────
@@ -877,7 +816,7 @@ export default function VentasPage() {
                           <td className="px-3 py-3">
                             <div className="flex gap-0.5">
                               {c.estado === "pendiente" && (
-                                <button type="button" onClick={async () => { const full = await ventasApi.getCotizacion(c.id).catch(() => c); convertirACotizacion(full); }} className="rounded p-1 text-green-500 hover:bg-green-50" title="Convertir a venta"><ShoppingCart className="h-3.5 w-3.5" /></button>
+                                <button type="button" onClick={() => navigate(`/ventas/nueva?cotizacion_id=${c.id}`)} className="rounded p-1 text-green-500 hover:bg-green-50" title="Convertir a venta"><ShoppingCart className="h-3.5 w-3.5" /></button>
                               )}
                               {c.estado !== "aprobada" && c.estado !== "rechazada" && (
                                 <button type="button" onClick={() => cambiarEstado(c.id, "aprobada")} className="rounded p-1 text-emerald-500 hover:bg-emerald-50" title="Aprobar"><Check className="h-3.5 w-3.5" /></button>
@@ -932,85 +871,6 @@ export default function VentasPage() {
           </div>
         </div>
       </div>
-
-      {/* ─────────────────────────────────────────────────────────────────────
-          Modal Nueva Venta / Convertir Cotización
-          ───────────────────────────────────────────────────────────────────── */}
-      <Dialog open={modalVenta} onOpenChange={(o) => { if (!o) { setModalVenta(false); resetForm(); } }}>
-        <DialogContent className="w-[95vw] max-w-[1180px] max-h-[95vh] overflow-hidden flex flex-col p-0">
-          <DialogHeader className="px-6 pt-5 pb-3 border-b border-slate-100">
-            <DialogTitle className="flex items-center gap-2">
-              <ShoppingCart className="h-5 w-5" />
-              {cotizacionOrigen
-                ? <><span>Convertir a Venta:</span><span className="font-mono text-slate-600">{cotizacionOrigen.numero}</span>{cotizacionOrigen.cliente_tipo && <TipoBadge tipo={cotizacionOrigen.cliente_tipo} />}</>
-                : "Nueva Venta"
-              }
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 min-h-0 overflow-hidden px-6 py-4 flex flex-col">
-            <ProductSearchPanel
-              busqueda={busqueda} setBusqueda={setBusqueda}
-              repFiltrados={repFiltrados} addToCart={addToCart}
-              cart={cart} setCart={setCart} removeFromCart={removeFromCart}
-              cartSubtotal={cartSubtotal} descuentoMonto={descuentoMonto}
-              clienteDescuento={clienteDescuento} cartTotal={cartTotal}
-              notas={notas} setNotas={setNotas}
-              clientes={clientes}
-              clienteNombre={clienteNombre} setClienteNombre={setClienteNombre}
-              clienteId={clienteId} setClienteId={setClienteId}
-              clienteDescuentoVal={clienteDescuento} setClienteDescuento={setClienteDescuento}
-              setClienteTipo={setClienteTipo}
-              footer={
-                <div className="space-y-2.5">
-                  {/* Notas de venta */}
-                  <div>
-                    <Label className="text-xs font-semibold text-slate-600">DETALLE / NOTAS DE VENTA</Label>
-                    <textarea
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-slate-300"
-                      rows={2} placeholder="Observaciones, condiciones especiales…"
-                      value={notas} onChange={(e) => setNotas(e.target.value)} maxLength={500}
-                    />
-                    <p className="text-right text-[10px] text-slate-400">{notas.length}/500</p>
-                  </div>
-                  {/* Fecha de la venta */}
-                  <div>
-                    <Label className="text-xs font-semibold text-slate-600">FECHA DE VENTA</Label>
-                    <input
-                      type="date"
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-slate-300"
-                      value={fechaVenta}
-                      onChange={(e) => setFechaVenta(e.target.value)}
-                    />
-                  </div>
-                  {/* Método de pago */}
-                  <div>
-                    <Label className="text-xs font-semibold text-slate-600">MÉTODO DE PAGO</Label>
-                    <select className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none" value={metodoPago} onChange={(e) => setMetodoPago(e.target.value as VentaIn["metodo_pago"])}>
-                      <option value="efectivo">Efectivo</option>
-                      <option value="tarjeta_debito">Tarjeta de Débito</option>
-                      <option value="tarjeta_credito">Tarjeta de Crédito</option>
-                      <option value="transferencia">Transferencia</option>
-                      <option value="mixto">Mixto</option>
-                    </select>
-                  </div>
-                  {metodoPago === "efectivo" && (
-                    <div>
-                      <Label className="text-xs font-semibold text-slate-600">MONTO RECIBIDO EN CAJA</Label>
-                      <Input className="mt-1 text-sm" type="number" placeholder={cartTotal.toFixed(2)} value={montoPagado} onChange={(e) => setMontoPagado(e.target.value)} />
-                      {montoPagado && parseFloat(montoPagado) >= cartTotal && (
-                        <p className="mt-0.5 text-xs text-green-600 font-medium">Cambio: {fmtBs(parseFloat(montoPagado) - cartTotal)}</p>
-                      )}
-                    </div>
-                  )}
-                  <Button onClick={handleProcesarVenta} disabled={cart.length === 0 || saving} className="w-full bg-slate-800 hover:bg-slate-900 text-white">
-                    {saving ? "Procesando…" : cotizacionOrigen ? "✓ Confirmar Venta" : "✓ Procesar Venta"}
-                  </Button>
-                </div>
-              }
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* ─────────────────────────────────────────────────────────────────────
           Modal Nueva Cotización

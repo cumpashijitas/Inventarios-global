@@ -44,8 +44,8 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/administracion/configuracion", label: "Configuración", icon: Settings, end: true, permiso: "configuracion" },
 ];
 
-// Cierra sesión automáticamente tras 45 minutos de inactividad
-const SESSION_TIMEOUT_MS = 45 * 60 * 1000;
+// Cierra sesión automáticamente tras 24 horas de inactividad
+const SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 export function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);

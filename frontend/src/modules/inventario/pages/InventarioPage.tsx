@@ -1,7 +1,7 @@
 import {
-  AlertTriangle, BookOpen, Building2, Car, Copy, CreditCard, Download, Eye, FolderOpen,
-  Gem, ImageIcon, Info, Mail, MapPin, Package, Pencil, Phone,
-  Plus, Ruler, Search, ShieldCheck, Tag, Trash2, User, X, Check,
+  AlertTriangle, BookOpen, Building2, Car, Copy, CreditCard, Download, Eye, FileDown, FolderOpen,
+  Gem, ImageIcon, Info, Mail, MapPin, Package, Pencil, Phone, Printer,
+  Plus, Ruler, Search, ShieldCheck, Tag, Trash2, TrendingUp, User, X, Check,
 } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { swr, bust, peek } from "@/shared/utils/cache";
@@ -68,6 +68,9 @@ function AccionesBtn({ onVer, onCopiar, onEditar, onEliminar }: { onVer?: () => 
 export default function InventarioPage() {
   const [tab, setTab]         = useState<Tab>("productos");
   const [busqueda, setBusqueda] = useState("");
+  const [soloBajoStock, setSoloBajoStock] = useState(false);
+  const [masVendidos, setMasVendidos] = useState(false);
+  const [modalPedido, setModalPedido] = useState(false);
   const rol = useAuthStore((s) => s.rol);
   // vendedor solo puede ver — no puede agregar/editar/eliminar productos, proveedores ni categorías
   const puedeEditar = puedeAcceder(rol, "inventario_editar");
@@ -194,7 +197,11 @@ export default function InventarioPage() {
   };
 
   const cargarProductos = async (search?: string, pg?: number) => {
-    const r = await inventarioApi.listProductos({ page: pg ?? page, page_size: pageSize, search });
+    const r = await inventarioApi.listProductos({
+      page: pg ?? page, page_size: pageSize, search,
+      solo_bajo_stock: soloBajoStock || undefined,
+      ordenar_por_ventas: masVendidos || undefined,
+    });
     setProductos(r.items);
     setTotalProductos(r.total);
   };
@@ -265,16 +272,14 @@ export default function InventarioPage() {
   }, [busqueda]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (!busquedaMounted.current) return; // ignorar mount inicial
+    setPage(1);
+    cargarProductos(busqueda || undefined, 1);
+  }, [soloBajoStock, masVendidos]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     if (!loading) cargarProductos(busqueda || undefined, page);
   }, [page, pageSize]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Stats ─────────────────────────────────────────────────────────────────
-  const STATS_BAR = [
-    { label: "Total Productos", value: totalProductos,      sub: "",                      color: "text-slate-800" },
-    { label: "Categorías",      value: categorias.filter(c => c.activo).length, sub: "", color: "text-violet-600" },
-    { label: "Proveedores",     value: proveedores.length,  sub: "",                      color: "text-teal-600" },
-    { label: "Clientes",        value: clientes.length,     sub: "",                      color: "text-indigo-600" },
-  ];
 
   // ── Filtros ───────────────────────────────────────────────────────────────
   const filtroProd = productos;
@@ -636,19 +641,6 @@ export default function InventarioPage() {
 
   return (
     <div className="flex flex-col gap-3" style={{ height: "calc(100vh - 80px)" }}>
-      {/* Stats bar */}
-      <div className="shrink-0 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-        {STATS_BAR.map((s) => (
-          <Card key={s.label} className="border-slate-200 shadow-sm">
-            <CardContent className="px-3 py-2">
-              <p className="text-xs text-slate-500">{s.label}</p>
-              <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
-              {s.sub && <p className="text-[10px] text-slate-400">{s.sub}</p>}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
       {/* Tabs */}
       <div className="flex-1 min-h-0 flex flex-col rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
         <div className="flex border-b border-slate-200 px-5 pt-1">
@@ -679,6 +671,34 @@ export default function InventarioPage() {
                 onChange={(e) => setBusqueda(e.target.value)}
               />
             </div>
+            {/* Stock mínimo — filtra la búsqueda actual a productos en/bajo su stock mínimo */}
+            {tab === "productos" && (
+              <Button
+                variant="outline"
+                onClick={() => setSoloBajoStock((v) => !v)}
+                className={`gap-1.5 text-sm ${soloBajoStock
+                  ? "border-orange-400 bg-orange-50 text-orange-700 hover:bg-orange-100"
+                  : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}
+                title="Mostrar solo productos con cantidad igual o menor a su stock mínimo"
+              >
+                <AlertTriangle className="h-4 w-4" />
+                Stock mínimo
+              </Button>
+            )}
+            {/* Más vendidos — reordena la búsqueda actual por unidades vendidas (histórico) */}
+            {tab === "productos" && (
+              <Button
+                variant="outline"
+                onClick={() => setMasVendidos((v) => !v)}
+                className={`gap-1.5 text-sm ${masVendidos
+                  ? "border-emerald-400 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                  : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}
+                title="Ordenar la búsqueda actual por productos más vendidos"
+              >
+                <TrendingUp className="h-4 w-4" />
+                Más vendidos
+              </Button>
+            )}
             {/* Exportar CSV — solo en tab productos */}
             {tab === "productos" && filtroProd.length > 0 && (
               <Button
@@ -836,10 +856,10 @@ export default function InventarioPage() {
               <p className="text-sm">{busqueda ? "Sin resultados para tu búsqueda" : "Aún no hay productos. ¡Agrega el primero!"}</p>
             </div>
           ) : (
-            <div className="flex-1 min-h-0 relative">
-              {/* Toolbar flotante cuando hay selección */}
+            <div className="flex-1 min-h-0 flex flex-col">
+              {/* Barra de selección — en flujo normal, arriba de la tabla (no la tapa) */}
               {selectedIds.size > 0 && (
-                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 bg-indigo-600 text-white rounded-xl shadow-2xl px-5 py-3 flex items-center gap-4 border-2 border-indigo-700">
+                <div className="shrink-0 z-20 bg-indigo-600 text-white shadow-md px-5 py-2.5 flex items-center gap-4 border-b-2 border-indigo-700">
                   <span className="text-sm font-semibold">{selectedIds.size} seleccionado{selectedIds.size > 1 ? "s" : ""}</span>
                   <div className="h-4 w-px bg-indigo-400" />
                   <div className="flex items-center gap-2">
@@ -863,6 +883,10 @@ export default function InventarioPage() {
                         </>
                       ) : null;
                     })()}
+                    <Button size="sm" variant="ghost" className="text-white hover:bg-indigo-500 gap-1.5 h-8"
+                      onClick={() => setModalPedido(true)}>
+                      <Printer className="h-4 w-4" /> Lista para proveedor
+                    </Button>
                     {puedeEditar && (
                       <Button size="sm" variant="ghost" className="text-white hover:bg-red-500 gap-1.5 h-8"
                         onClick={() => confirmarEliminar(`${selectedIds.size} producto${selectedIds.size > 1 ? "s" : ""}`, handleEliminarSeleccionados)}>
@@ -877,7 +901,7 @@ export default function InventarioPage() {
                 </div>
               )}
 
-              <div className="h-full overflow-auto">
+              <div className="flex-1 min-h-0 overflow-auto">
                 {(() => {
                   // Anchos de las 4 columnas sticky (3 redimensionables)
                   const W_FOTO = 62;
@@ -908,7 +932,7 @@ export default function InventarioPage() {
                           <div onMouseDown={makeResizeHandler(prodColWidth, setProdColWidth)} className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-amber-600/50" />
                         </th>
                         {/* Columnas scrollables */}
-                        {["CANTIDAD","STOCK MÍN","UNIDAD","MARCA","PROCEDENCIA",
+                        {["CANTIDAD","STOCK MÍN","VENDIDOS","UNIDAD","MARCA","PROCEDENCIA",
                           "COSTO UNITARIO","COSTO CAJA","PRECIO FACTURA","PRECIO MAYOR","PRECIO TALLER","PRECIO MAYORISTA",
                           "CATEGORÍA","INDUSTRIA","MODELO","MEDIDA","PROVEEDOR","APLICACIÓN","DETALLE"].map((h) => (
                           <th key={h} className={TH}>
@@ -925,13 +949,12 @@ export default function InventarioPage() {
                         const stockNum = Math.round(Number(p.stock_total ?? 0));
                         const minNum = Math.round(parseFloat(p.stock_minimo));
                         const stockColor = stockNum === 0 ? "text-red-600 font-bold" : stockNum < minNum ? "text-orange-500 font-bold" : "text-slate-800 font-semibold";
-                        const rowBg = idx % 2 === 0 ? "bg-white" : "bg-amber-50";
                         const isSelected = selectedIds.has(p.id);
-                        const bg = isSelected ? '#eef2ff' : idx % 2 === 0 ? '#ffffff' : '#fffbeb';
+                        const bg = isSelected ? 'var(--row-selected)' : idx % 2 === 0 ? 'var(--row-even)' : 'var(--row-odd)';
                         const C = "border border-slate-200 px-2 py-1 whitespace-nowrap";
                         const S = "border border-slate-200 px-1 py-1 sticky z-20";
                         return (
-                          <tr key={p.id} className={`${rowBg} ${isSelected ? "border-l-4 border-l-indigo-600" : ""} hover:bg-amber-100/60 ${!p.activo ? "opacity-50" : ""}`}>
+                          <tr key={p.id} style={{ backgroundColor: bg }} className={`${isSelected ? "border-l-4 border-l-indigo-600" : ""} hover:brightness-95 ${!p.activo ? "opacity-50" : ""}`}>
                             {/* Sticky: FOTO */}
                             <td className={S} style={{ left: 0, width: W_FOTO, minWidth: W_FOTO, maxWidth: W_FOTO, backgroundColor: bg }}>
                               <div className="flex items-center gap-1">
@@ -951,17 +974,18 @@ export default function InventarioPage() {
                               <span className="block truncate">{p.nombre}</span>
                             </td>
                             {/* Scrollables */}
-                            <td className={`${C} text-center font-mono ${stockColor}`}>{stockNum}</td>
-                            <td className={`${C} text-center font-mono text-slate-500`}>{minNum}</td>
+                            <td className={`${C} text-center ${stockColor}`}>{stockNum}</td>
+                            <td className={`${C} text-center text-slate-500`}>{minNum}</td>
+                            <td className={`${C} text-center text-emerald-600 font-semibold`}>{Math.round(Number(p.vendidos ?? 0))}</td>
                             <td className={`${C} text-center text-slate-600`}>{unidCodigo}</td>
                             <td className={`${C} text-slate-600`}>{p.marca ?? "—"}</td>
                             <td className={`${C} text-slate-600`}>{p.procedencia ?? "—"}</td>
-                            <td className={`${C} font-mono text-right text-slate-700`}>{fmtBs(p.precio_compra)}</td>
-                            <td className={`${C} font-mono text-right text-slate-500`}>{p.costo_caja ? fmtBs(p.costo_caja) : "—"}</td>
-                            <td className={`${C} font-mono text-right font-semibold text-emerald-700`}>{fmtBs(p.precio_venta)}</td>
-                            <td className={`${C} font-mono text-right text-slate-700`}>{p.precio_mayor ? fmtBs(p.precio_mayor) : "—"}</td>
-                            <td className={`${C} font-mono text-right text-slate-700`}>{p.precio_mecanico ? fmtBs(p.precio_mecanico) : "—"}</td>
-                            <td className={`${C} font-mono text-right text-blue-700 font-semibold`}>{p.precio_real ? fmtBs(p.precio_real) : "—"}</td>
+                            <td className={`${C} text-right text-slate-700`}>{fmtBs(p.precio_compra)}</td>
+                            <td className={`${C} text-right text-slate-500`}>{p.costo_caja ? fmtBs(p.costo_caja) : "—"}</td>
+                            <td className={`${C} text-right font-semibold text-emerald-700`}>{fmtBs(p.precio_venta)}</td>
+                            <td className={`${C} text-right text-slate-700`}>{p.precio_mayor ? fmtBs(p.precio_mayor) : "—"}</td>
+                            <td className={`${C} text-right text-slate-700`}>{p.precio_mecanico ? fmtBs(p.precio_mecanico) : "—"}</td>
+                            <td className={`${C} text-right text-blue-700 font-semibold`}>{p.precio_real ? fmtBs(p.precio_real) : "—"}</td>
                             <td className={`${C} text-slate-600`}>{catNombre}</td>
                             <td className={`${C} text-slate-600`}>{p.industria ?? "—"}</td>
                             <td className={`${C} text-slate-500`}>{p.modelos ?? "—"}</td>
@@ -992,7 +1016,7 @@ export default function InventarioPage() {
                           DESCRIPCIÓN
                           <div onMouseDown={makeResizeHandler(prodColWidth, setProdColWidth)} className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-amber-600/50" />
                         </th>
-                        {["CANTIDAD","STOCK MÍN","MARCA","PROCEDENCIA","UNIDAD",
+                        {["CANTIDAD","STOCK MÍN","VENDIDOS","MARCA","PROCEDENCIA","UNIDAD",
                           "PRECIO FACTURA","PRECIO MAYOR","PRECIO TALLER","PRECIO MAYORISTA",
                           "MOTOR","MODELO","UBICACIÓN","APLICACIÓN","DETALLE"].map((h) => (
                           <th key={h} className={TH}>
@@ -1007,13 +1031,12 @@ export default function InventarioPage() {
                         const stockNum = Math.round(Number(p.stock_total ?? 0));
                         const minNum = Math.round(parseFloat(p.stock_minimo));
                         const stockColor = stockNum === 0 ? "text-red-600 font-bold" : stockNum < minNum ? "text-orange-500 font-bold" : "text-slate-800 font-semibold";
-                        const rowBg = idx % 2 === 0 ? "bg-white" : "bg-amber-50";
                         const isSelected = selectedIds.has(p.id);
-                        const bg = isSelected ? '#eef2ff' : idx % 2 === 0 ? '#ffffff' : '#fffbeb';
+                        const bg = isSelected ? 'var(--row-selected)' : idx % 2 === 0 ? 'var(--row-even)' : 'var(--row-odd)';
                         const C = "border border-slate-200 px-2 py-1 whitespace-nowrap";
                         const S = "border border-slate-200 px-1 py-1 sticky z-20";
                         return (
-                          <tr key={p.id} className={`${rowBg} ${isSelected ? "border-l-4 border-l-indigo-600" : ""} hover:bg-amber-100/60 ${!p.activo ? "opacity-50" : ""}`}>
+                          <tr key={p.id} style={{ backgroundColor: bg }} className={`${isSelected ? "border-l-4 border-l-indigo-600" : ""} hover:brightness-95 ${!p.activo ? "opacity-50" : ""}`}>
                             <td className={S} style={{ left: 0, width: W_FOTO, minWidth: W_FOTO, maxWidth: W_FOTO, backgroundColor: bg }}>
                               <div className="flex items-center gap-1">
                                 <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(p.id)}
@@ -1028,15 +1051,16 @@ export default function InventarioPage() {
                             <td className={`${S} text-slate-800 overflow-hidden`} style={{ left: L_DESC, width: prodColWidth, minWidth: prodColWidth, maxWidth: prodColWidth, backgroundColor: bg }}>
                               <span className="block truncate">{p.nombre}</span>
                             </td>
-                            <td className={`${C} text-center font-mono ${stockColor}`}>{stockNum}</td>
-                            <td className={`${C} text-center font-mono text-slate-500`}>{minNum}</td>
+                            <td className={`${C} text-center ${stockColor}`}>{stockNum}</td>
+                            <td className={`${C} text-center text-slate-500`}>{minNum}</td>
+                            <td className={`${C} text-center text-emerald-600 font-semibold`}>{Math.round(Number(p.vendidos ?? 0))}</td>
                             <td className={`${C} text-slate-600`}>{p.marca ?? "—"}</td>
                             <td className={`${C} text-slate-600`}>{p.procedencia ?? "—"}</td>
                             <td className={`${C} text-center text-slate-600`}>{unidCodigo}</td>
-                            <td className={`${C} font-mono text-right font-semibold text-emerald-700`}>{fmtBs(p.precio_venta)}</td>
-                            <td className={`${C} font-mono text-right text-slate-700`}>{p.precio_mayor ? fmtBs(p.precio_mayor) : "—"}</td>
-                            <td className={`${C} font-mono text-right text-slate-700`}>{p.precio_mecanico ? fmtBs(p.precio_mecanico) : "—"}</td>
-                            <td className={`${C} font-mono text-right text-blue-700 font-semibold`}>{p.precio_real ? fmtBs(p.precio_real) : "—"}</td>
+                            <td className={`${C} text-right font-semibold text-emerald-700`}>{fmtBs(p.precio_venta)}</td>
+                            <td className={`${C} text-right text-slate-700`}>{p.precio_mayor ? fmtBs(p.precio_mayor) : "—"}</td>
+                            <td className={`${C} text-right text-slate-700`}>{p.precio_mecanico ? fmtBs(p.precio_mecanico) : "—"}</td>
+                            <td className={`${C} text-right text-blue-700 font-semibold`}>{p.precio_real ? fmtBs(p.precio_real) : "—"}</td>
                             <td className={`${C} text-slate-600`}>{p.motor ?? "—"}</td>
                             <td className={`${C} text-slate-500`}>{p.modelos ?? "—"}</td>
                             <td className={`${C} text-slate-500`}>{p.ubicacion ?? "—"}</td>
@@ -1412,9 +1436,19 @@ export default function InventarioPage() {
                     onChange={handleImagenSeleccionada}
                   />
                   <div
-                    onClick={() => productoModal.item && imgInputRef.current?.click()}
-                    className={`mt-1 relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 overflow-hidden transition-colors
-                      ${productoModal.item ? "cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/30" : "cursor-not-allowed opacity-50"}
+                    onDoubleClick={() => productoModal.item && imgInputRef.current?.click()}
+                    onPaste={(e) => {
+                      if (!productoModal.item) return;
+                      const item = Array.from(e.clipboardData.items).find((i) => i.type.startsWith("image/"));
+                      if (!item) return;
+                      const file = item.getAsFile();
+                      if (!file) return;
+                      const synth = { target: { files: [file] } } as unknown as React.ChangeEvent<HTMLInputElement>;
+                      handleImagenSeleccionada(synth);
+                    }}
+                    tabIndex={0}
+                    className={`mt-1 relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 overflow-hidden transition-colors outline-none
+                      ${productoModal.item ? "cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/30 focus:border-indigo-400" : "cursor-not-allowed opacity-50"}
                       ${imgUploading ? "animate-pulse" : ""}`}
                     style={{ minHeight: "9rem" }}
                   >
@@ -1430,7 +1464,7 @@ export default function InventarioPage() {
                       <>
                         <ImageIcon className="h-8 w-8 text-slate-300 mb-2" />
                         <p className="text-xs text-slate-400 text-center px-2">
-                          {productoModal.item ? "Haz clic para subir imagen" : "Guarda el producto primero"}
+                          {productoModal.item ? "Clic + Ctrl+V para pegar · doble clic para subir archivo" : "Guarda el producto primero"}
                         </p>
                         <p className="text-[10px] text-slate-300 mt-0.5">JPEG · PNG · WEBP · máx 5 MB</p>
                       </>
@@ -2145,6 +2179,26 @@ export default function InventarioPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Modal Lista para proveedor (descarga PDF) ── */}
+      <Dialog open={modalPedido} onOpenChange={setModalPedido}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <FileDown className="h-4 w-4" /> Lista para proveedor
+              </DialogTitle>
+              <Button variant="outline" size="sm" className="gap-1 text-xs"
+                onClick={() => generarPedidoPDF([...selectedIds].map((id) => productos.find((p) => p.id === id)).filter((p): p is Producto => !!p))}>
+                <FileDown className="h-3.5 w-3.5" /> Descargar PDF
+              </Button>
+            </div>
+          </DialogHeader>
+          <DocPedidoProveedor
+            productos={[...selectedIds].map((id) => productos.find((p) => p.id === id)).filter((p): p is Producto => !!p)}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -2226,4 +2280,64 @@ function FormSection({ icon, title, color, children }: {
       </div>
     </div>
   );
+}
+
+// ─── Vista previa: lista de pedido para proveedor ─────────────────────────────
+function DocPedidoProveedor({ productos }: { productos: Producto[] }) {
+  const fecha = new Date().toLocaleDateString("es-BO", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return (
+    <div className="font-sans text-sm space-y-3">
+      <div className="text-center space-y-0.5">
+        <p className="font-bold text-base">Lista de pedido a proveedor</p>
+        <p className="text-xs text-slate-500">Generado el {fecha}</p>
+      </div>
+      <table className="w-full border-collapse text-xs">
+        <thead>
+          <tr className="border-b-2 border-slate-800">
+            <th className="text-left py-1.5 pr-2">Código</th>
+            <th className="text-left py-1.5">Descripción</th>
+          </tr>
+        </thead>
+        <tbody>
+          {productos.map((p) => (
+            <tr key={p.id} className="border-b border-slate-200">
+              <td className="py-1.5 pr-2 font-mono">{p.sku}</td>
+              <td className="py-1.5">{p.nombre}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {productos.length === 0 && (
+        <p className="text-center text-xs text-slate-400 py-4">No hay productos seleccionados.</p>
+      )}
+    </div>
+  );
+}
+
+// ─── Genera y descarga el PDF de la lista de pedido para proveedor ────────────
+async function generarPedidoPDF(productos: Producto[]) {
+  const { jsPDF } = await import("jspdf");
+  const { default: autoTable } = await import("jspdf-autotable");
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+  const fecha = new Date().toLocaleDateString("es-BO", { day: "2-digit", month: "2-digit", year: "numeric" });
+  doc.setFontSize(14);
+  doc.setFont("helvetica", "bold");
+  doc.text("Lista de pedido a proveedor", 14, 18);
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100);
+  doc.text(`Generado el ${fecha}`, 14, 24);
+
+  autoTable(doc, {
+    startY: 30,
+    head: [["Código", "Descripción"]],
+    body: productos.map((p) => [p.sku, p.nombre]),
+    styles: { fontSize: 9, cellPadding: 3 },
+    headStyles: { fillColor: [67, 56, 202], textColor: 255, fontStyle: "bold" },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: { 0: { cellWidth: 45 } },
+  });
+
+  doc.save(`pedido-proveedor_${fecha.replace(/\//g, "-")}.pdf`);
 }

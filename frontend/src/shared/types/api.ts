@@ -60,8 +60,9 @@ export interface Producto {
   procedencia?: string | null;
   industria?: string | null;
   motor?: string | null;
-  // campo calculado por join en el listado
+  // campos calculados por join en el listado
   stock_total?: number;
+  vendidos?: number;
   created_at: string; updated_at: string;
 }
 export interface ProductoIn {

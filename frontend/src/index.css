@@ -7,6 +7,13 @@
     --background: 0 0% 100%;
     --foreground: 222.2 47% 11.2%;
 
+    /* ── Colores de filas de tabla ── */
+    --row-even:     #ffffff;
+    --row-odd:      #fde9b6;
+    --row-selected: #eef2ff;
+    --row-keyboard: #c7d2fe;
+    --row-cart:     #eef2ff;
+
     --card: 0 0% 100%;
     --card-foreground: 222.2 47% 11.2%;
 
@@ -20,7 +27,7 @@
     --secondary-foreground: 240 6% 10%;
 
     --muted: 240 5% 96%;
-    --muted-foreground: 240 4% 46%;
+    --muted-foreground: 240 4% 35%;
 
     --accent: 240 5% 94%;
     --accent-foreground: 240 6% 10%;
@@ -35,14 +42,27 @@
     --radius: 0.5rem;
   }
 
+  /* Refuerza el amarillo de filas alternadas en TODAS las tablas del sistema
+     (no solo Inventario/Nueva Venta, que ya usan --row-odd directo).
+     Selector con ancestro "table" le gana en especificidad al utility de
+     Tailwind sin tocar los 9 archivos que siguen usando la clase bg-amber-50/40. */
+  table .bg-amber-50\/40 { background-color: var(--row-odd); }
+
   .dark {
     /* Fondo principal muy oscuro (slate-950) */
     --background:   222 47%  6%;
-    --foreground:   213 31% 91%;
+    --foreground:   213 31% 96%;
+
+    /* ── Colores de filas de tabla en dark ── */
+    --row-even:     hsl(215 28% 10%);
+    --row-odd:      hsl(215 28% 16%);
+    --row-selected: hsl(243 60% 18%);
+    --row-keyboard: hsl(243 60% 23%);
+    --row-cart:     hsl(243 60% 18%);
 
     /* Cards / superficies (slate-900) */
     --card:         215 28% 10%;
-    --card-foreground: 213 31% 91%;
+    --card-foreground: 213 31% 96%;
 
     /* Popovers / dropdowns (slate-800) */
     --popover:      215 28% 13%;
@@ -79,7 +99,9 @@
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
-  /* tabular-nums por defecto en tablas para que los números aliñen */
+  /* tabular-nums para que los números aliñen en tablas.
+     OJO: NO usar font-feature-settings "zero" — activa un cero cruzado con
+     una línea diagonal que se confunde con el 8 (reportado por usuario real). */
   table {
     font-variant-numeric: tabular-nums;
   }
@@ -140,11 +162,21 @@
    (el selector .dark tiene mayor especificidad que la clase sola)
    ============================================================================= */
 @layer utilities {
-  /* ── Fondos ── */
+  /* ── Fondos generales ── */
   .dark .bg-white          { background-color: hsl(215 28% 10%); }
   .dark .bg-slate-50       { background-color: hsl(222 47%  6%); }
   .dark .bg-slate-100      { background-color: hsl(215 28% 14%); }
   .dark .bg-slate-200      { background-color: hsl(215 28% 18%); }
+
+  /* ── Filas de tabla alternadas (amber) ── */
+  .dark .bg-amber-50       { background-color: hsl(215 28% 16%); }
+  .dark .bg-amber-50\/40   { background-color: hsl(215 28% 13%); }
+  .dark .bg-amber-100      { background-color: hsl(215 28% 19%); }
+  .dark .hover\:bg-amber-100\/60:hover { background-color: hsl(215 28% 20%); }
+  .dark .hover\:bg-amber-100:hover     { background-color: hsl(215 28% 20%); }
+
+  /* ── Texto en celdas de tabla ── */
+  .dark .text-black        { color: hsl(213 31% 96%); }
 
   /* ── Bordes ── */
   .dark .border-slate-100  { border-color: hsl(215 25% 16%); }
@@ -153,11 +185,11 @@
 
   /* ── Texto ── */
   .dark .text-slate-900    { color: hsl(213 31% 95%); }
-  .dark .text-slate-800    { color: hsl(213 31% 91%); }
-  .dark .text-slate-700    { color: hsl(213 31% 82%); }
-  .dark .text-slate-600    { color: hsl(215 16% 70%); }
-  .dark .text-slate-500    { color: hsl(215 16% 57%); }
-  .dark .text-slate-400    { color: hsl(215 16% 47%); }
+  .dark .text-slate-800    { color: hsl(213 31% 96%); }
+  .dark .text-slate-700    { color: hsl(213 31% 88%); }
+  .dark .text-slate-600    { color: hsl(215 16% 76%); }
+  .dark .text-slate-500    { color: hsl(215 16% 65%); }
+  .dark .text-slate-400    { color: hsl(215 16% 55%); }
 
   /* ── Divisores ── */
   .dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: hsl(215 25% 16%); }
