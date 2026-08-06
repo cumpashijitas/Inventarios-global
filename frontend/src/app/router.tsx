@@ -50,6 +50,7 @@ const ReporteBajoStockPage   = lazy(() => import("@/modules/reportes/pages/Repor
 
 // ── Administración ───────────────────────────────────────────────────────────
 // TODO: conectar con endpoints de gestión de empresa y usuarios
+const MiPerfilPage      = lazy(() => import("@/modules/administracion/pages/MiPerfilPage"));
 const UsuariosPage      = lazy(() => import("@/modules/administracion/pages/UsuariosPage"));
 const EmpresaPage       = lazy(() => import("@/modules/administracion/pages/EmpresaPage"));
 const SuscripcionPage   = lazy(() => import("@/modules/administracion/pages/SuscripcionPage"));
@@ -106,6 +107,9 @@ const routes: RouteObject[] = [
         children: [
           // ── Dashboard ──────────────────────────────────────────────────────
           { path: "/",                               element: <S><DashboardPage /></S> },
+
+          // ── Mi Perfil (todos los roles) ──────────────────────────────────────
+          { path: "/perfil",                         element: <S><MiPerfilPage /></S> },
 
           // ── Inventario (vendedor puede ver, no editar) ─────────────────────
           {

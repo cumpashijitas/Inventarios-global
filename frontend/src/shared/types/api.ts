@@ -24,6 +24,22 @@ export interface LoginResponse {
 }
 export interface MeResponse {
   user_id: string; email: string | null; empresa_id: string | null; rol: string | null;
+  foto_url?: string | null;
+}
+
+// ─── Ranking de vendedores ──────────────────────────────────────────────────
+export interface VendedorRanking {
+  user_id: string;
+  nombre: string;
+  foto_url: string | null;
+  cantidad_ventas: number;
+  monto_total: number;
+  pct_cantidad: number;
+  pct_monto: number;
+}
+export interface RankingVendedoresOut {
+  periodo: { desde: string; hasta: string };
+  vendedores: VendedorRanking[];
 }
 export interface EmpresaPerfil {
   razon_social: string | null;

@@ -45,21 +45,28 @@ class ProductosRepository:
             )
 
         if search and search.strip():
+            # Columnas donde se busca cada palabra. Cada palabra debe coincidir
+            # con el INICIO de la columna o el INICIO de alguna palabra dentro
+            # de ella (no en cualquier posición) — así "PISTON 4A" encuentra
+            # "PISTON TOYOTA MOTOR 4AGE" sin traer coincidencias a mitad de
+            # palabra como "CAMISA" al buscar "MISA".
+            columnas_busqueda = [
+                "p.nombre", "p.sku", "coalesce(p.codigo_universal,'')",
+                "coalesce(p.marca,'')", "coalesce(p.procedencia,'')",
+                "coalesce(p.motor,'')", "coalesce(p.modelos,'')",
+                "coalesce(p.industria,'')", "coalesce(p.medidas,'')",
+                "coalesce(p.aplicacion,'')", "coalesce(p.descripcion,'')",
+            ]
             for token in search.strip().lower().split():
                 params.append(f"{token}%")
-                n = len(params)
-                where_clauses.append(
-                    f"(lower(p.nombre) like ${n} or lower(p.sku) like ${n}"
-                    f" or lower(coalesce(p.codigo_universal,'')) like ${n}"
-                    f" or lower(coalesce(p.marca,'')) like ${n}"
-                    f" or lower(coalesce(p.procedencia,'')) like ${n}"
-                    f" or lower(coalesce(p.motor,'')) like ${n}"
-                    f" or lower(coalesce(p.modelos,'')) like ${n}"
-                    f" or lower(coalesce(p.industria,'')) like ${n}"
-                    f" or lower(coalesce(p.medidas,'')) like ${n}"
-                    f" or lower(coalesce(p.aplicacion,'')) like ${n}"
-                    f" or lower(coalesce(p.descripcion,'')) like ${n})"
-                )
+                n = len(params)      # coincide al inicio de la columna
+                params.append(f"% {token}%")
+                m = len(params)      # coincide al inicio de una palabra dentro de la columna
+                condiciones = [
+                    f"(lower({col}) like ${n} or lower({col}) like ${m})"
+                    for col in columnas_busqueda
+                ]
+                where_clauses.append("(" + " or ".join(condiciones) + ")")
 
         where = " and ".join(where_clauses)
         stock_join = """

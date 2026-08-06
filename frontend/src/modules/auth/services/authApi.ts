@@ -31,6 +31,15 @@ export const authApi = {
     return r.data;
   },
 
+  subirMiFoto: async (file: File): Promise<{ foto_url: string }> => {
+    const form = new FormData();
+    form.append("file", file);
+    const r = await api.post<{ foto_url: string }>("/auth/me/foto", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return r.data;
+  },
+
   empresaPerfil: async (): Promise<EmpresaPerfil> => {
     const r = await api.get<EmpresaPerfil>("/auth/empresa");
     return r.data;

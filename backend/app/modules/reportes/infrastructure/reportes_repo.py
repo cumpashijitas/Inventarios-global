@@ -177,3 +177,31 @@ class ReportesRepository:
             empresa_id, desde, hasta,
         )
         return [dict(r) for r in rows]
+
+    async def ranking_vendedores(self, empresa_id: UUID, desde: date, hasta: date) -> list[dict[str, Any]]:
+        """
+        Ranking de vendedores por cantidad de ventas y monto vendido en el
+        período. Incluye a todo usuario activo de la empresa (aunque no haya
+        vendido nada en el período, para que aparezca en 0) — el vínculo
+        venta→vendedor es ventas.created_by = usuarios_empresa.user_id.
+        """
+        rows = await self.conn.fetch(
+            """
+            select ue.user_id, ue.nombre, ue.foto_url,
+                   count(v.id)                    as cantidad_ventas,
+                   coalesce(sum(v.total), 0)       as monto_total
+              from public.usuarios_empresa ue
+              left join public.ventas v
+                on v.created_by = ue.user_id
+               and v.empresa_id = ue.empresa_id
+               and v.fecha between $2 and $3
+               and v.estado = 'completada'
+             where ue.empresa_id = $1
+               and ue.activo = true
+               and ue.deleted_at is null
+             group by ue.user_id, ue.nombre, ue.foto_url
+             order by monto_total desc, cantidad_ventas desc
+            """,
+            empresa_id, desde, hasta,
+        )
+        return [dict(r) for r in rows]

@@ -102,6 +102,17 @@ async def match_items(
             match_nombre_inv = prod_match["nombre"]
             confianza    = 100
 
+            # Mismo código pero nombres sin ninguna palabra en común → el
+            # proveedor pudo reusar un código para un producto distinto.
+            # No confiar ciegamente: bajar a "conflicto" para que el usuario
+            # revise la comparación antes de guardar (ver InvDataBar en el UI).
+            if nombre_doc and prod_match["nombre"]:
+                palabras_doc = set(_palabras_clave(nombre_doc))
+                palabras_inv = set(_palabras_clave(str(prod_match["nombre"])))
+                if palabras_doc and palabras_inv and not (palabras_doc & palabras_inv):
+                    match_status = "conflicto"
+                    confianza    = 50
+
         # ── Nivel 2: SKU parcial (primeros 6 chars) ──────────────────────────
         elif sku_norm and len(sku_norm) >= 5:
             prefijo = sku_norm[:6]

@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header
+from uuid import UUID
 
+import httpx
+from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile, status
+
+from app.core.config import settings
+from app.core.database import acquire_tenant_conn
 from app.core.deps import get_jwt_claims
 from app.core.security import JWTClaims
 from app.modules.auth.application.use_cases import AuthUseCases, get_auth_use_cases
@@ -74,12 +79,93 @@ async def logout(
 async def me(claims: JWTClaims = Depends(get_jwt_claims)) -> dict:
     """Devuelve la info del usuario autenticado (útil para debug y para que el
     frontend reconstruya el estado tras un refresh)."""
+    foto_url = None
+    if claims.empresa_id:
+        async with acquire_tenant_conn(claims.empresa_id, claims.sub) as conn:
+            foto_url = await conn.fetchval(
+                "select foto_url from public.usuarios_empresa"
+                " where empresa_id = $1 and user_id = $2",
+                UUID(claims.empresa_id), UUID(claims.sub),
+            )
     return {
         "user_id": claims.sub,
         "email": claims.email,
         "empresa_id": claims.empresa_id,
         "rol": claims.rol,
+        "foto_url": foto_url,
     }
+
+
+@router.post("/me/foto")
+async def subir_mi_foto(
+    file: UploadFile = File(...),
+    claims: JWTClaims = Depends(get_jwt_claims),
+) -> dict:
+    """Sube la foto de perfil del usuario autenticado a Supabase Storage y
+    actualiza usuarios_empresa.foto_url. Cada usuario solo puede subir la suya."""
+    if not claims.empresa_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sin empresa activa")
+
+    BUCKET = "usuarios"
+    MAX_BYTES = 5 * 1024 * 1024  # 5 MB
+
+    _ct_map = {"image/jpg": "image/jpeg"}
+    ct_raw = (file.content_type or "").lower().split(";")[0].strip()
+    ct = _ct_map.get(ct_raw, ct_raw)
+
+    allowed = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+    if ct not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"Tipo no permitido: '{ct}'. Soportados: JPEG, PNG, WEBP, GIF.",
+        )
+
+    content = await file.read(MAX_BYTES + 1)
+    if len(content) > MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="La imagen no puede superar 5 MB.",
+        )
+
+    _ext_map = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}
+    ext = _ext_map.get(ct, ".jpg")
+    storage_path = f"{claims.empresa_id}/{claims.sub}{ext}"
+    object_url = f"{settings.supabase_url}/storage/v1/object/{BUCKET}/{storage_path}"
+    public_url  = f"{settings.supabase_url}/storage/v1/object/public/{BUCKET}/{storage_path}"
+
+    svc_headers = {"Authorization": f"Bearer {settings.supabase_service_role_key}"}
+
+    async with httpx.AsyncClient(timeout=30) as http:
+        await http.post(
+            f"{settings.supabase_url}/storage/v1/bucket",
+            json={"id": BUCKET, "name": BUCKET, "public": True},
+            headers={**svc_headers, "Content-Type": "application/json"},
+        )
+        resp = await http.post(
+            object_url,
+            content=content,
+            headers={
+                **svc_headers,
+                "Content-Type": ct,
+                "x-upsert": "true",
+                "Cache-Control": "3600",
+            },
+        )
+
+    if resp.status_code not in (200, 201):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Supabase Storage respondió {resp.status_code}: {resp.text}",
+        )
+
+    async with acquire_tenant_conn(claims.empresa_id, claims.sub) as conn:
+        await conn.execute(
+            "update public.usuarios_empresa set foto_url = $1, updated_at = now()"
+            " where empresa_id = $2 and user_id = $3",
+            public_url, UUID(claims.empresa_id), UUID(claims.sub),
+        )
+
+    return {"foto_url": public_url}
 
 
 @router.get("/empresa")

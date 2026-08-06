@@ -212,6 +212,24 @@ export default function InventarioPage() {
     await cargarProductos(busqueda || undefined);
   };
 
+  const cargarProveedores = async () => {
+    bust("inv:proveedores");
+    const r = await inventarioApi.listProveedores({ page_size: 200 });
+    setProveedores(r.items);
+  };
+
+  const cargarClientes = async () => {
+    bust("inv:clientes");
+    const r = await inventarioApi.listClientes({ page_size: 200 });
+    setClientes(r.items);
+  };
+
+  const cargarCategorias = async () => {
+    bust("inv:categorias");
+    const r = await inventarioApi.listCategorias(false);
+    setCategorias(r);
+  };
+
   // Evita que el efecto de busqueda se dispare en el mount inicial
   const busquedaMounted = useRef(false);
 

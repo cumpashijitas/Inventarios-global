@@ -13,6 +13,7 @@ import {
   Settings,
   ShoppingCart,
   Sun,
+  UserCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -239,6 +240,13 @@ export function AppShell() {
 
               {userMenuOpen && (
                 <div className="absolute right-0 top-full z-50 mt-1.5 w-48 rounded-xl border border-slate-200 bg-white p-1 shadow-lg shadow-slate-200/60 dark:border-slate-700 dark:bg-slate-800 dark:shadow-slate-900/60">
+                  <button
+                    onClick={() => { setUserMenuOpen(false); navigate("/perfil"); }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    <UserCircle className="h-4 w-4" />
+                    Mi perfil
+                  </button>
                   <button
                     onClick={() => { setUserMenuOpen(false); setPwModal(true); }}
                     className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"

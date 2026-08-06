@@ -6,6 +6,7 @@ import {
   Download,
   Package,
   RefreshCw,
+  Trophy,
   TrendingUp,
   X,
 } from "lucide-react";
@@ -14,6 +15,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import { RankingVendedores } from "@/shared/components/RankingVendedores";
 import { reportesApi } from "@/modules/reportes/services/reportesApi";
 import type {
   ReporteInventario,
@@ -671,6 +673,18 @@ export default function ReportesPage() {
           </p>
         </div>
       </div>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          Ranking de Vendedores — mes actual, visible para todos los roles
+      ══════════════════════════════════════════════════════════════════════ */}
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="pb-2 pt-4 px-5">
+          <SectionTitle icon={Trophy} title="Ranking de Vendedores" sub="mes actual — competencia sana entre el equipo" />
+        </CardHeader>
+        <CardContent className="px-5 pb-5">
+          <RankingVendedores />
+        </CardContent>
+      </Card>
 
       {/* ══════════════════════════════════════════════════════════════════════
           BLOQUE 1 — Resumen de Ventas

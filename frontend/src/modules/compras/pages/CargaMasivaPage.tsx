@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle, CheckCircle, ChevronRight, Eye, FileSpreadsheet,
+  AlertOctagon, AlertTriangle, CheckCircle, ChevronRight, Eye, FileSpreadsheet,
   HelpCircle, Loader2, Plus, Save, Search, Trash2, Upload, X,
 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
@@ -42,6 +42,7 @@ interface FilaProducto {
   // Matching
   matchStatus: MatchStatus | "manual";
   matchId?: string | null;
+  matchSku?: string | null;
   matchNombre?: string | null;
   confianza?: number;
   invData?: InvData | null;
@@ -60,11 +61,12 @@ const FILA_VACIA = (): FilaProducto => ({
 
 // ─── Estilos por estado de matching ──────────────────────────────────────────
 const MATCH_STYLE: Record<string, { row: string; badge: string; label: string; icon: React.ElementType }> = {
-  existente:  { row: "bg-blue-50/60 border-l-4 border-l-blue-400",   badge: "bg-blue-100 text-blue-700",   label: "Actualiza stock", icon: CheckCircle },
-  probable:   { row: "bg-yellow-50/60 border-l-4 border-l-yellow-400", badge: "bg-yellow-100 text-yellow-700", label: "Verificar",      icon: HelpCircle },
-  nuevo:      { row: "bg-green-50/60 border-l-4 border-l-green-400",  badge: "bg-green-100 text-green-700",  label: "Nuevo producto",  icon: Plus },
-  incompleto: { row: "bg-red-50/60 border-l-4 border-l-red-400",     badge: "bg-red-100 text-red-700",     label: "Incompleto",      icon: AlertTriangle },
-  manual:     { row: "", badge: "bg-slate-100 text-slate-500", label: "Manual", icon: FileSpreadsheet },
+  existente:  { row: "bg-white dark:bg-slate-900 border-l-[6px] border-l-blue-500",     badge: "bg-blue-600 text-white",   label: "Actualiza stock", icon: CheckCircle },
+  conflicto:  { row: "bg-orange-50 dark:bg-orange-950/50 border-l-[6px] border-l-orange-600", badge: "bg-orange-600 text-white", label: "¡Revisar! Mismo código, otro producto", icon: AlertOctagon },
+  probable:   { row: "bg-white dark:bg-slate-900 border-l-[6px] border-l-yellow-500",   badge: "bg-yellow-500 text-black",   label: "Verificar",      icon: HelpCircle },
+  nuevo:      { row: "bg-white dark:bg-slate-900 border-l-[6px] border-l-green-500",    badge: "bg-green-600 text-white",  label: "Nuevo producto",  icon: Plus },
+  incompleto: { row: "bg-red-50 dark:bg-red-950/50 border-l-[6px] border-l-red-600",    badge: "bg-red-600 text-white",     label: "Incompleto",      icon: AlertTriangle },
+  manual:     { row: "", badge: "bg-slate-500 text-white", label: "Manual", icon: FileSpreadsheet },
 };
 
 const COLUMNAS = [
@@ -140,7 +142,7 @@ export default function CargaMasivaPage() {
 
   // ── Importación real de archivo ───────────────────────────────────────────
   const [advertenciasImport, setAdvertenciasImport] = useState<string[]>([]);
-  const [resumenImport, setResumenImport] = useState<{existentes:number;probables:number;nuevos:number;incompletos:number} | null>(null);
+  const [resumenImport, setResumenImport] = useState<{existentes:number;probables:number;nuevos:number;incompletos:number;conflictos:number} | null>(null);
   const [bannerExito, setBannerExito] = useState<string | null>(null);
 
   const handleImportarArchivo = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -160,27 +162,27 @@ export default function CargaMasivaPage() {
       }
       // Convertir ParsedItem[] → FilaProducto[]
       const nuevasFilas: FilaProducto[] = result.items.map((item: ParsedItem) => {
-        const isMatch = item.match_status === "existente" || item.match_status === "probable";
-        const inv     = item.inv_data;
-
         return {
           ...FILA_VACIA(),
           sku: item.sku ?? "",
-          // Si hay match: datos del inventario. Si es nuevo: datos del PDF.
-          nombre:          isMatch && inv?.nombre          ? inv.nombre          : (item.nombre   ?? ""),
-          marca:           isMatch && inv?.marca           ? inv.marca           : (item.marca    ?? ""),
-          medidas:         isMatch && inv?.medidas         ? inv.medidas         : "",
-          modelos:         isMatch && inv?.modelos         ? inv.modelos         : (item.modelos  ?? ""),
-          codigoUniversal: isMatch && inv?.codigo_universal ? inv.codigo_universal : "",
-          procedencia:     isMatch && inv?.procedencia     ? inv.procedencia     : "",
-          industria:       isMatch && inv?.industria       ? inv.industria       : "",
-          motor:           isMatch && inv?.motor           ? inv.motor           : "",
+          // Siempre los datos del PDF, tal cual — nunca se sustituyen por los
+          // del inventario, aunque haya match. Lo que ya tienes registrado se
+          // ve aparte (InvDataBar) para comparar, no para pisar la fila.
+          nombre:          item.nombre   ?? "",
+          marca:           item.marca    ?? "",
+          medidas:         "",
+          modelos:         item.modelos  ?? "",
+          codigoUniversal: "",
+          procedencia:     "",
+          industria:       "",
+          motor:           "",
           // Precios: siempre del PDF (vienen del proveedor)
           precioReal:      item.precio_compra ?? "",
           cantidad:        item.cantidad      ?? "0",
           // Matching
           matchStatus: item.match_status,
           matchId:     item.match_id,
+          matchSku:    item.match_sku,
           matchNombre: item.match_nombre,
           confianza:   item.confianza,
           invData:     item.inv_data ?? null,
@@ -189,9 +191,10 @@ export default function CargaMasivaPage() {
       setFilas(nuevasFilas);
       setAdvertenciasImport(result.advertencias);
       // Resumen
-      const s = { existentes: 0, probables: 0, nuevos: 0, incompletos: 0 };
+      const s = { existentes: 0, probables: 0, nuevos: 0, incompletos: 0, conflictos: 0 };
       for (const f of nuevasFilas) {
         if (f.matchStatus === "existente") s.existentes++;
+        else if (f.matchStatus === "conflicto") s.conflictos++;
         else if (f.matchStatus === "probable") s.probables++;
         else if (f.matchStatus === "nuevo") s.nuevos++;
         else if (f.matchStatus === "incompleto") s.incompletos++;
@@ -235,6 +238,13 @@ export default function CargaMasivaPage() {
 
     try {
       const items = filasValidas.map((f) => ({
+        // Solo se liga al producto existente si el código sigue siendo el
+        // mismo que detectó el matcher. Si el usuario lo editó (ej. porque
+        // era un producto distinto con el mismo código), se guarda como
+        // producto nuevo en vez de pisar el existente.
+        producto_id: (f.matchId && f.matchSku && f.sku.trim().toUpperCase() === f.matchSku.toUpperCase())
+          ? f.matchId
+          : undefined,
         sku:              f.sku.trim(),
         nombre:           f.nombre.trim(),
         categoria:        f.categoria        || undefined,
@@ -561,6 +571,11 @@ export default function CargaMasivaPage() {
                 <span className="rounded-full bg-blue-100 text-blue-700 px-2 py-0.5 font-medium">
                   🔵 {resumenImport.existentes} actualizan stock
                 </span>
+                {resumenImport.conflictos > 0 && (
+                  <span className="rounded-full bg-orange-200 text-orange-800 px-2 py-0.5 font-bold">
+                    🟠 {resumenImport.conflictos} ¡revisar código repetido!
+                  </span>
+                )}
                 <span className="rounded-full bg-yellow-100 text-yellow-700 px-2 py-0.5 font-medium">
                   🟡 {resumenImport.probables} verificar
                 </span>
@@ -603,11 +618,11 @@ export default function CargaMasivaPage() {
                   return (
                   <React.Fragment key={fila.id}>
                   <tr className={`${style.row} hover:brightness-95 transition-all`}>
-                    <td className="px-3 py-2 text-slate-400 text-center w-8">
-                      <div className="flex flex-col items-center gap-0.5">
-                        <span className="text-[10px]">{idx + 1}</span>
-                        <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${style.badge}`}>
-                          <BadgeIcon className="h-2.5 w-2.5" />
+                    <td className="px-3 py-2 text-slate-500 dark:text-slate-400 text-center w-8">
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-xs font-bold">{idx + 1}</span>
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold whitespace-nowrap ${style.badge}`}>
+                          <BadgeIcon className="h-3 w-3" />
                           {style.label}
                         </span>
                       </div>
@@ -643,10 +658,10 @@ export default function CargaMasivaPage() {
                     </td>
                   </tr>
                   {/* Fila de referencia del inventario (solo para matches) */}
-                  {fila.invData && (fila.matchStatus === "existente" || fila.matchStatus === "probable") && (
-                    <tr className="bg-slate-50/80 border-b border-slate-100">
-                      <td colSpan={COLUMNAS.length} className="px-3 py-1.5">
-                        <InvDataBar inv={fila.invData} />
+                  {fila.invData && (fila.matchStatus === "existente" || fila.matchStatus === "probable" || fila.matchStatus === "conflicto") && (
+                    <tr className={fila.matchStatus === "conflicto" ? "bg-orange-100 dark:bg-orange-950/60 border-b-2 border-orange-300 dark:border-orange-800" : "bg-slate-100 dark:bg-slate-800 border-b-2 border-slate-200 dark:border-slate-700"}>
+                      <td colSpan={COLUMNAS.length} className="px-4 py-2.5">
+                        <InvDataBar inv={fila.invData} conflicto={fila.matchStatus === "conflicto"} />
                       </td>
                     </tr>
                   )}
@@ -752,7 +767,7 @@ function itemToFila(item: Lote["items"][number]): FilaProducto {
 }
 
 /** Barra de referencia con los datos actuales del inventario para un producto con match */
-function InvDataBar({ inv }: { inv: InvData }) {
+function InvDataBar({ inv, conflicto }: { inv: InvData; conflicto?: boolean }) {
   const campos: { label: string; value: string | number | null | undefined }[] = [
     { label: "Nombre",    value: inv.nombre },
     { label: "Marca",     value: inv.marca },
@@ -770,16 +785,23 @@ function InvDataBar({ inv }: { inv: InvData }) {
   if (campos.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-      <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 shrink-0">
-        Inventario actual →
-      </span>
-      {campos.map((c) => (
-        <span key={c.label} className="text-[10px] text-slate-400">
-          <span className="font-semibold text-slate-500">{c.label}:</span>{" "}
-          <span className="font-mono">{String(c.value)}</span>
+    <div className="space-y-1.5 py-1">
+      {conflicto && (
+        <p className="text-sm font-bold text-orange-700 dark:text-orange-400">
+          ⚠ Ese código ya está registrado con datos distintos — esto es lo que ya tienes. Si no es el mismo producto, cambia el código de la fila de arriba antes de guardar.
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        <span className={`text-xs font-extrabold uppercase tracking-wide shrink-0 ${conflicto ? "text-orange-600 dark:text-orange-400" : "text-slate-600 dark:text-slate-300"}`}>
+          Ya tienes registrado con este código →
         </span>
-      ))}
+        {campos.map((c) => (
+          <span key={c.label} className={`text-sm font-semibold ${conflicto ? "text-orange-700 dark:text-orange-300" : "text-slate-700 dark:text-slate-200"}`}>
+            <span className="font-extrabold">{c.label}:</span>{" "}
+            <span className="font-mono font-bold">{String(c.value)}</span>
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

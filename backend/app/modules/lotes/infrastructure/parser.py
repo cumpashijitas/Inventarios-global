@@ -22,17 +22,26 @@ ALIASES: dict[str, list[str]] = {
         "cod universal", "cod_universal", "codigo universal",
         "part number", "part no", "part#", "referencia", "ref.",
         "item no", "item#", "no.", "n°",
+        "clave", "clave interna", "clave producto", "sku", "codigo interno",
+        "codigo de barras", "cod barra", "ean", "id producto", "id",
     ],
     "nombre": [
         "detalle", "descripcion", "descripcion del producto",
         "nombre", "nombre del producto", "producto", "articulo",
         "artículo", "item description", "description", "desc",
+        "concepto", "detalle del producto", "denominacion", "denominación",
+        "glosa", "producto/servicio", "nombre articulo",
     ],
-    "cantidad": ["q", "cant", "cant.", "cantidad", "qty", "quantity", "unidades", "uds"],
+    "cantidad": [
+        "q", "cant", "cant.", "cantidad", "qty", "quantity", "unidades", "uds",
+        "cant. pedida", "cantidad pedida",
+    ],
     "precio_compra": [
         "precio", "pre-u", "precio_unitario", "precio unitario",
         "p.u.", "pu", "p/u", "unit price", "price", "valor",
         "precio real", "precio_real",
+        "importe unitario", "importe unit", "costo unitario", "costo",
+        "precio compra", "precio de compra", "vlr unitario", "valor unitario",
     ],
     "marca": ["marca", "brand", "fabricante"],
     "modelos": [
@@ -372,6 +381,69 @@ def _extract_word_zones(pdf: Any) -> list[dict[str, str]]:
     return all_items
 
 
+# Un "código" de producto: alfanumérico con separadores típicos (-, /, .),
+# 3-25 caracteres, y al menos un dígito (para no confundir con palabras sueltas).
+_CODE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9\-/.]{2,24}$")
+# Un "precio" al final de línea: número con separador de miles/decimales opcional.
+_PRICE_RE = re.compile(r"^\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?$")
+
+
+def _extract_generic_lines(pdf: Any) -> list[dict[str, str]]:
+    """
+    Última estrategia — no depende de reconocer ningún encabezado.
+    Para cada línea de texto busca: primer token con forma de código de
+    producto (tiene un dígito) ... último token con forma de precio, y toma
+    todo lo de en medio como nombre. Sirve para PDFs sin tabla real, sin
+    encabezados, o con encabezados que el diccionario de alias no reconoce
+    (listas de precios simples, cotizaciones en texto plano, etc.).
+    """
+    items: list[dict[str, str]] = []
+
+    for page in pdf.pages:
+        texto = page.extract_text() or ""
+        for linea in texto.split("\n"):
+            linea = linea.strip()
+            if len(linea) < 8:
+                continue
+            tokens = linea.split()
+            if len(tokens) < 3:
+                continue
+
+            primero = tokens[0]
+            if not re.search(r"\d", primero) or not _CODE_RE.match(primero):
+                continue
+
+            # Buscar de derecha a izquierda el último token con forma de precio
+            precio_idx = None
+            for i in range(len(tokens) - 1, 0, -1):
+                candidato = re.sub(r"[^\d.,]", "", tokens[i])
+                if candidato and _PRICE_RE.match(candidato):
+                    precio_idx = i
+                    break
+            if precio_idx is None or precio_idx <= 1:
+                continue
+
+            nombre = " ".join(tokens[1:precio_idx]).strip()
+            # Descartar nombres demasiado cortos (probable falso positivo:
+            # totales, fechas, pies de página)
+            if len(nombre) < 3 or not re.search(r"[A-Za-zÁÉÍÓÚÑáéíóúñ]{3,}", nombre):
+                continue
+
+            codigo = _normalizar_codigo(primero)
+            precio = _limpiar_numero(tokens[precio_idx])
+            item: dict[str, str] = {"sku": codigo, "nombre": nombre}
+            if precio:
+                item["precio_compra"] = precio
+
+            marca = _extraer_marca_de_codigo(codigo)
+            if marca:
+                item["marca"] = marca
+
+            items.append(item)
+
+    return items
+
+
 def parse_pdf(content: bytes) -> tuple[list[dict[str, str]], list[str]]:
     """
     Extrae items de un PDF digital.
@@ -412,9 +484,18 @@ def parse_pdf(content: bytes) -> tuple[list[dict[str, str]], list[str]]:
 
         # ── Estrategia 2: zone-based sin bordes ──────────────────────────────
         items_word = _extract_word_zones(pdf)
+        if items_word:
+            return items_word, advertencias
 
-    if items_word:
-        return items_word, advertencias
+        # ── Estrategia 3: líneas de texto sin encabezados reconocibles ───────
+        items_generic = _extract_generic_lines(pdf)
+        if items_generic:
+            advertencias.append(
+                "No se detectó una tabla ni encabezados de columna reconocidos: "
+                "los productos se extrajeron por patrón de texto (código … precio). "
+                "Revisa con cuidado los datos de cada fila antes de guardar."
+            )
+            return items_generic, advertencias
 
     # ── Sin resultado ─────────────────────────────────────────────────────────
     advertencias.append(

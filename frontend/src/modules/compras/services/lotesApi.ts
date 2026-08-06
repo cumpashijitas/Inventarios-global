@@ -52,7 +52,7 @@ export const lotesApi = {
   },
 };
 
-export type MatchStatus = "existente" | "probable" | "nuevo" | "incompleto";
+export type MatchStatus = "existente" | "probable" | "nuevo" | "incompleto" | "conflicto";
 
 export interface InvData {
   nombre?: string | null;

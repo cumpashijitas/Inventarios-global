@@ -1,5 +1,6 @@
 import { api } from "@/shared/api/client";
 import type {
+  RankingVendedoresOut,
   ReporteInventario,
   ReporteMovimiento,
   ReporteMovimientosPage,
@@ -10,6 +11,13 @@ export const reportesApi = {
   getVentas: async (desde: string, hasta: string, search?: string): Promise<ReporteVentas> => {
     const r = await api.get<ReporteVentas>("/reportes/ventas", {
       params: { desde, hasta, search: search || undefined },
+    });
+    return r.data;
+  },
+
+  getRankingVendedores: async (desde: string, hasta: string): Promise<RankingVendedoresOut> => {
+    const r = await api.get<RankingVendedoresOut>("/reportes/ranking-vendedores", {
+      params: { desde, hasta },
     });
     return r.data;
   },

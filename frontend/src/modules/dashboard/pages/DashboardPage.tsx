@@ -17,6 +17,7 @@ import { useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { swr, peek } from "@/shared/utils/cache";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { RankingVendedores } from "@/shared/components/RankingVendedores";
 import { dashboardApi } from "@/modules/dashboard/services/dashboardApi";
 import { adminApi } from "@/modules/administracion/services/adminApi";
 import { api } from "@/shared/api/client";
@@ -365,6 +366,23 @@ export default function DashboardPage() {
           {reporteMsg}
         </div>
       )}
+
+      {/* ── Top vendedores del mes ───────────────────────────────────────────── */}
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="pb-2 pt-4 px-5">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-semibold text-slate-700">
+              Top Vendedores del Mes
+            </CardTitle>
+            <button onClick={() => navigate("/reportes")} className="text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+              Ver ranking completo →
+            </button>
+          </div>
+        </CardHeader>
+        <CardContent className="px-5 pb-5">
+          <RankingVendedores compact />
+        </CardContent>
+      </Card>
 
       {/* ── Stat cards ─────────────────────────────────────────────────────── */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -47,6 +47,38 @@ async def reporte_ventas(
     }
 
 
+@router.get("/ranking-vendedores")
+async def ranking_vendedores(
+    desde: date = Query(...),
+    hasta: date = Query(...),
+    ctx: TenantContext = Depends(get_tenant_context),
+) -> dict:
+    async with acquire_tenant_conn(ctx.empresa_id, ctx.user_id) as conn:
+        repo = ReportesRepository(conn)
+        ranking = await repo.ranking_vendedores(UUID(ctx.empresa_id), desde, hasta)
+
+    items = [
+        {
+            "user_id": str(r["user_id"]),
+            "nombre": r["nombre"],
+            "foto_url": r["foto_url"],
+            "cantidad_ventas": int(r["cantidad_ventas"]),
+            "monto_total": float(r["monto_total"]),
+        }
+        for r in ranking
+    ]
+    max_cantidad = max((i["cantidad_ventas"] for i in items), default=0)
+    max_monto = max((i["monto_total"] for i in items), default=0.0)
+    for i in items:
+        i["pct_cantidad"] = round(i["cantidad_ventas"] / max_cantidad * 100, 1) if max_cantidad else 0.0
+        i["pct_monto"] = round(i["monto_total"] / max_monto * 100, 1) if max_monto else 0.0
+
+    return {
+        "periodo": {"desde": str(desde), "hasta": str(hasta)},
+        "vendedores": items,
+    }
+
+
 @router.get("/inventario")
 async def reporte_inventario(
     ctx: TenantContext = Depends(get_tenant_context),
