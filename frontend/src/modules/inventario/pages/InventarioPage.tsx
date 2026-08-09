@@ -743,10 +743,10 @@ export default function InventarioPage() {
 
           {/* Segunda fila: PAGINACIÓN (solo en productos) */}
           {tab === "productos" && totalProductos > 0 && (
-            <div className="bg-amber-50 px-5 py-2.5 flex items-center justify-between border-t border-amber-200">
-              <div className="flex items-center gap-3 text-sm text-slate-700">
+            <div className="bg-amber-50 px-5 py-2.5 flex flex-wrap items-center justify-between gap-y-2 border-t border-amber-200">
+              <div className="flex flex-wrap items-center gap-3 text-sm text-slate-700">
                 <span className="font-semibold">Mostrando <span className="text-indigo-600">{productos.length}</span> de <span className="text-indigo-600">{totalProductos}</span> productos</span>
-                <div className="h-4 w-px bg-slate-300" />
+                <div className="hidden sm:block h-4 w-px bg-slate-300" />
                 <select
                   className="rounded border border-slate-300 px-2 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={pageSize}
@@ -760,13 +760,13 @@ export default function InventarioPage() {
               </div>
 
               {totalPages > 1 && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     size="sm"
                     variant="outline"
                     disabled={!hasPrevPage}
                     onClick={() => setPage(1)}
-                    className="text-xs h-7"
+                    className="hidden sm:inline-flex text-xs h-7"
                   >
                     Primera
                   </Button>
@@ -856,7 +856,7 @@ export default function InventarioPage() {
                     variant="outline"
                     disabled={!hasNextPage}
                     onClick={() => setPage(totalPages)}
-                    className="text-xs h-7"
+                    className="hidden sm:inline-flex text-xs h-7"
                   >
                     Última
                   </Button>
@@ -877,10 +877,10 @@ export default function InventarioPage() {
             <div className="flex-1 min-h-0 flex flex-col">
               {/* Barra de selección — en flujo normal, arriba de la tabla (no la tapa) */}
               {selectedIds.size > 0 && (
-                <div className="shrink-0 z-20 bg-indigo-600 text-white shadow-md px-5 py-2.5 flex items-center gap-4 border-b-2 border-indigo-700">
+                <div className="shrink-0 z-20 bg-indigo-600 text-white shadow-md px-5 py-2.5 flex flex-wrap items-center gap-y-2 gap-x-4 border-b-2 border-indigo-700">
                   <span className="text-sm font-semibold">{selectedIds.size} seleccionado{selectedIds.size > 1 ? "s" : ""}</span>
-                  <div className="h-4 w-px bg-indigo-400" />
-                  <div className="flex items-center gap-2">
+                  <div className="hidden sm:block h-4 w-px bg-indigo-400" />
+                  <div className="flex flex-wrap items-center gap-2">
                     {selectedIds.size === 1 && (() => {
                       const p = productos.find((pr) => pr.id === [...selectedIds][0]);
                       return p ? (
@@ -912,14 +912,73 @@ export default function InventarioPage() {
                       </Button>
                     )}
                   </div>
-                  <div className="h-4 w-px bg-indigo-400" />
+                  <div className="hidden sm:block h-4 w-px bg-indigo-400" />
                   <button onClick={clearSelection} className="text-white/80 hover:text-white">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
               )}
 
-              <div className="flex-1 min-h-0 overflow-auto">
+              {/* ── Vista de tarjetas (solo celular) ── */}
+              <div className="flex-1 min-h-0 overflow-auto md:hidden space-y-2 p-3">
+                {filtroProd.map((p) => {
+                  const catNombre = categorias.find(c => c.id === p.categoria_id)?.nombre ?? "—";
+                  const stockNum = Math.round(Number(p.stock_total ?? 0));
+                  const minNum = Math.round(parseFloat(p.stock_minimo));
+                  const stockColor = stockNum === 0 ? "text-red-600" : stockNum < minNum ? "text-orange-500" : "text-emerald-600";
+                  const isSelected = selectedIds.has(p.id);
+                  return (
+                    <div
+                      key={p.id}
+                      className={`rounded-lg border p-3 flex gap-3 ${isSelected ? "border-indigo-400 bg-indigo-50" : "border-slate-200 bg-white"} ${!p.activo ? "opacity-50" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(p.id)}
+                        className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600"
+                      />
+                      <div className="w-12 h-12 rounded overflow-hidden bg-slate-100 shrink-0 flex items-center justify-center">
+                        {p.imagen_url
+                          ? <img src={p.imagen_url} alt="" loading="lazy" className="w-full h-full object-cover" />
+                          : <ImageIcon className="h-5 w-5 text-slate-300" />}
+                      </div>
+                      <button className="min-w-0 flex-1 text-left" onClick={() => abrirVerProducto(p)}>
+                        <p className="text-sm font-semibold text-slate-800 truncate">{p.nombre}</p>
+                        <p className="text-xs font-mono text-slate-500 truncate">
+                          {p.sku}{p.codigo_universal ? ` · ${p.codigo_universal}` : ""}
+                        </p>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                          <span className="text-slate-500 truncate">{catNombre}</span>
+                          <span className={`font-semibold ${stockColor}`}>Stock: {stockNum}</span>
+                          <span className="font-semibold text-emerald-700">{fmtBs(p.precio_venta)}</span>
+                        </div>
+                      </button>
+                      <div className="flex flex-col gap-1 shrink-0">
+                        <button
+                          onClick={() => abrirVerProducto(p)}
+                          className="p-1.5 rounded hover:bg-slate-100 text-slate-500"
+                          title="Ver"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        {puedeEditar && (
+                          <button
+                            onClick={() => abrirEditarProducto(p)}
+                            className="p-1.5 rounded hover:bg-slate-100 text-indigo-600"
+                            title="Editar"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* ── Tabla completa (desde md) ── */}
+              <div className="hidden md:block flex-1 min-h-0 overflow-auto">
                 {(() => {
                   // Anchos de las 4 columnas sticky (3 redimensionables)
                   const W_FOTO = 62;
@@ -1095,10 +1154,10 @@ export default function InventarioPage() {
 
               {/* Controles de paginación */}
               {totalProductos > 0 && (
-                <div className="border-t border-slate-200 bg-slate-50 px-5 py-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3 text-sm text-slate-600">
+                <div className="border-t border-slate-200 bg-slate-50 px-5 py-3 flex flex-wrap items-center justify-between gap-y-2">
+                  <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
                     <span>Mostrando <strong>{productos.length}</strong> de <strong>{totalProductos}</strong> productos</span>
-                    <div className="h-4 w-px bg-slate-300" />
+                    <div className="hidden sm:block h-4 w-px bg-slate-300" />
                     <select
                       className="rounded border border-slate-300 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       value={pageSize}
@@ -1111,13 +1170,13 @@ export default function InventarioPage() {
                     </select>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       size="sm"
                       variant="outline"
                       disabled={!hasPrevPage}
                       onClick={() => setPage(1)}
-                      className="text-xs"
+                      className="hidden sm:inline-flex text-xs"
                     >
                       Primera
                     </Button>
@@ -1211,7 +1270,7 @@ export default function InventarioPage() {
                       variant="outline"
                       disabled={!hasNextPage}
                       onClick={() => setPage(totalPages)}
-                      className="text-xs"
+                      className="hidden sm:inline-flex text-xs"
                     >
                       Última
                     </Button>

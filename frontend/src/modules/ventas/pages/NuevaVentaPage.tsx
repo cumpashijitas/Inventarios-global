@@ -535,15 +535,15 @@ export default function NuevaVentaPage() {
     <div className="flex flex-col" style={{ height: "calc(100vh - 56px)" }}>
 
       {/* ── Barra superior: buscar primero ───────────────────────────────── */}
-      <div className="shrink-0 flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-2">
+      <div className="shrink-0 flex flex-wrap items-center gap-3 gap-y-2 border-b border-slate-200 bg-white px-4 py-2">
         <button type="button" onClick={() => navigate("/ventas")}
           className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 shrink-0">
           <ArrowLeft className="h-4 w-4" /> Volver
         </button>
-        <div className="h-5 w-px bg-slate-200 shrink-0" />
+        <div className="hidden sm:block h-5 w-px bg-slate-200 shrink-0" />
 
         {/* PRIMERO: buscador de productos */}
-        <div className="relative flex-1">
+        <div className="relative flex-1 min-w-[160px]">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 pointer-events-none" />
           <input
             className="w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-7 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white"

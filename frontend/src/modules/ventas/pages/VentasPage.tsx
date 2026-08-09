@@ -679,7 +679,7 @@ export default function VentasPage() {
       </div>
 
       {/* ── Body ─────────────────────────────────────────────────────────── */}
-      <div className="flex gap-4 items-start">
+      <div className="flex flex-col lg:flex-row gap-4 lg:items-start">
         {/* Tabla principal */}
         <div className="flex-1 min-w-0 rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex border-b border-slate-200 px-5">
@@ -848,7 +848,7 @@ export default function VentasPage() {
         </div>
 
         {/* Top Productos */}
-        <div className="w-64 shrink-0 rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="w-full lg:w-64 lg:shrink-0 rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
             <TrendingUp className="h-4 w-4 text-indigo-500" />
             <span className="text-sm font-semibold text-slate-700">Repuestos Más Vendidos</span>
@@ -1054,7 +1054,7 @@ function ProductSearchPanel({
   return (
     /* min-h-0 es clave: permite que los hijos flex se compriman y habilita
        overflow-y-auto en los paneles internos sin desbordarse del modal */
-    <div className="flex gap-6 flex-1 min-h-0">
+    <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
 
       {/* ── Panel izquierdo — cliente + catálogo ──────────────────────────── */}
       <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-3">
@@ -1089,7 +1089,7 @@ function ProductSearchPanel({
           </div>
 
           {/* Catálogo — flex-1 + min-h-0 + overflow-y-auto = scroll propio */}
-          <div className="mt-2 flex-1 min-h-0 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100 bg-white">
+          <div className="mt-2 flex-1 min-h-0 max-h-72 lg:max-h-none overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100 bg-white">
             {repFiltrados.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-slate-300">
                 <Search className="h-8 w-8 mb-2" />
@@ -1150,7 +1150,7 @@ function ProductSearchPanel({
       {/* ── Panel derecho — carrito con scroll propio ─────────────────────── */}
       {/* overflow-y-auto + min-h-0: el panel entero scrollea si el contenido
           (ítems + totales + footer) supera la altura disponible del modal     */}
-      <div className="w-[340px] shrink-0 min-h-0 flex flex-col border-l border-slate-200 pl-6 overflow-y-auto">
+      <div className="w-full lg:w-[340px] shrink-0 min-h-0 max-h-96 lg:max-h-none flex flex-col border-t lg:border-t-0 lg:border-l border-slate-200 pt-4 lg:pt-0 lg:pl-6 overflow-y-auto">
         <p className="sticky top-0 bg-white z-10 text-xs font-semibold uppercase tracking-wider text-slate-400 pb-2 mb-1">
           CARRITO DE VENTA
         </p>
