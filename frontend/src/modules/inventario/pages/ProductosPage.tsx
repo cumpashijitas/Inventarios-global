@@ -233,9 +233,8 @@ export default function ProductosPage() {
 }
 
 // --- mini hook de debounce inline para no inflar shared con un archivo de 5 líneas ---
-import { useEffect, useState as useStateHook } from "react";
 function useDebounce<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useStateHook(value);
+  const [debounced, setDebounced] = useState(value);
   useEffect(() => {
     const t = setTimeout(() => setDebounced(value), delay);
     return () => clearTimeout(t);

@@ -97,14 +97,15 @@ class AdminRepo:
     async def listar_usuarios(self, empresa_id: UUID) -> list[dict]:
         rows = await self.conn.fetch(
             """
-            SELECT ue.id, ue.user_id, ue.nombre, ue.email,
-                   r.codigo  AS rol_codigo,
-                   r.nombre  AS rol_nombre,
-                   ue.activo, ue.created_at
+            SELECT ue.id, ue.user_id, ue.nombre, ue.email, ue.activo, ue.created_at,
+                   COALESCE(array_agg(r.codigo ORDER BY r.codigo)
+                            FILTER (WHERE r.codigo IS NOT NULL), '{}') AS rol_codigos
               FROM public.usuarios_empresa ue
-              JOIN public.roles_empresa r ON r.id = ue.rol_id
+              LEFT JOIN public.usuario_empresa_roles uer ON uer.usuario_empresa_id = ue.id
+              LEFT JOIN public.roles_empresa r ON r.id = uer.rol_id
              WHERE ue.empresa_id = $1
                AND ue.deleted_at IS NULL
+             GROUP BY ue.id
              ORDER BY ue.created_at
             """,
             empresa_id,
@@ -114,12 +115,14 @@ class AdminRepo:
     async def get_usuario(self, empresa_id: UUID, usuario_id: UUID) -> dict | None:
         row = await self.conn.fetchrow(
             """
-            SELECT ue.id, ue.user_id, ue.nombre, ue.email,
-                   r.codigo AS rol_codigo, r.nombre AS rol_nombre,
-                   ue.activo, ue.created_at
+            SELECT ue.id, ue.user_id, ue.nombre, ue.email, ue.activo, ue.created_at,
+                   COALESCE(array_agg(r.codigo ORDER BY r.codigo)
+                            FILTER (WHERE r.codigo IS NOT NULL), '{}') AS rol_codigos
               FROM public.usuarios_empresa ue
-              JOIN public.roles_empresa r ON r.id = ue.rol_id
+              LEFT JOIN public.usuario_empresa_roles uer ON uer.usuario_empresa_id = ue.id
+              LEFT JOIN public.roles_empresa r ON r.id = uer.rol_id
              WHERE ue.empresa_id = $1 AND ue.id = $2 AND ue.deleted_at IS NULL
+             GROUP BY ue.id
             """,
             empresa_id, usuario_id,
         )
@@ -131,47 +134,65 @@ class AdminRepo:
         user_id: UUID,      # UUID del auth user de Supabase
         nombre: str,
         email: str,
-        rol_id: UUID,
+        rol_ids: list[UUID],
         invitado_por: UUID,
     ) -> dict:
         row = await self.conn.fetchrow(
             """
             INSERT INTO public.usuarios_empresa
-              (empresa_id, user_id, nombre, email, rol_id, invitado_por)
-            VALUES ($1, $2, $3, $4, $5, $6)
+              (empresa_id, user_id, nombre, email, invitado_por)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id, user_id, nombre, email, activo, created_at
             """,
-            empresa_id, user_id, nombre, email, rol_id, invitado_por,
+            empresa_id, user_id, nombre, email, invitado_por,
         )
-        return dict(row)
+        usuario = dict(row)
+        await self._set_roles(empresa_id, usuario["id"], rol_ids)
+        return usuario
 
     async def actualizar_usuario(
         self,
         empresa_id: UUID,
         usuario_id: UUID,
         nombre: str | None,
-        rol_id: UUID | None,
+        rol_ids: list[UUID] | None,
         activo: bool | None,
     ) -> dict | None:
         # Construir SET dinámico solo con campos que vienen
         sets, vals = [], [empresa_id, usuario_id]
         if nombre is not None:
             vals.append(nombre);  sets.append(f"nombre=${len(vals)}")
-        if rol_id is not None:
-            vals.append(rol_id);  sets.append(f"rol_id=${len(vals)}")
         if activo is not None:
             vals.append(activo);  sets.append(f"activo=${len(vals)}")
-        if not sets:
-            return await self.get_usuario(empresa_id, usuario_id)
+        if sets:
+            sets.append("updated_at=now()")
+            sql = f"""
+                UPDATE public.usuarios_empresa
+                   SET {', '.join(sets)}
+                 WHERE empresa_id=$1 AND id=$2 AND deleted_at IS NULL
+            """
+            await self.conn.execute(sql, *vals)
 
-        sets.append("updated_at=now()")
-        sql = f"""
-            UPDATE public.usuarios_empresa
-               SET {', '.join(sets)}
-             WHERE empresa_id=$1 AND id=$2 AND deleted_at IS NULL
-        """
-        await self.conn.execute(sql, *vals)
+        if rol_ids is not None:
+            await self._set_roles(empresa_id, usuario_id, rol_ids)
+
         return await self.get_usuario(empresa_id, usuario_id)
+
+    async def _set_roles(self, empresa_id: UUID, usuario_empresa_id: UUID, rol_ids: list[UUID]) -> None:
+        """Reemplaza por completo el conjunto de roles de un usuario."""
+        async with self.conn.transaction():
+            await self.conn.execute(
+                "DELETE FROM public.usuario_empresa_roles WHERE usuario_empresa_id=$1 AND empresa_id=$2",
+                usuario_empresa_id, empresa_id,
+            )
+            if rol_ids:
+                await self.conn.executemany(
+                    """
+                    INSERT INTO public.usuario_empresa_roles (empresa_id, usuario_empresa_id, rol_id)
+                    VALUES ($1, $2, $3)
+                    """,
+                    [(empresa_id, usuario_empresa_id, rid) for rid in rol_ids],
+                )
 
     async def desactivar_usuario(self, empresa_id: UUID, usuario_id: UUID) -> None:
         await self.conn.execute(

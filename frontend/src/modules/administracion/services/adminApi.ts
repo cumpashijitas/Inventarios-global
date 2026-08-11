@@ -13,8 +13,7 @@ export interface UsuarioAdmin {
   user_id: string;
   nombre: string;
   email: string;
-  rol_codigo: string;
-  rol_nombre: string;
+  rol_codigos: string[];
   activo: boolean;
   created_at: string;
 }
@@ -23,12 +22,12 @@ export interface UsuarioCreateIn {
   nombre: string;
   email: string;
   password: string;
-  rol_codigo: string;
+  rol_codigos: string[];
 }
 
 export interface UsuarioUpdateIn {
   nombre?: string;
-  rol_codigo?: string;
+  rol_codigos?: string[];
   activo?: boolean;
 }
 

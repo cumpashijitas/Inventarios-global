@@ -40,13 +40,15 @@ export const PERMISOS: Record<string, Rol[]> = {
 };
 
 /**
- * Retorna true si el rol tiene el permiso indicado.
- * null/undefined (no autenticado) → false.
+ * Retorna true si ALGUNO de los roles del usuario tiene el permiso indicado
+ * (unión de permisos — un usuario puede tener varios roles a la vez, ej.
+ * Encargado de Inventario + Vendedor). Lista vacía/null → false.
  */
-export function puedeAcceder(rol: string | null | undefined, permiso: keyof typeof PERMISOS): boolean {
-  if (!rol) return false;
-  if (rol === ROL.ADMIN) return true;           // admin pasa siempre
-  return (PERMISOS[permiso] as string[]).includes(rol);
+export function puedeAcceder(roles: string[] | null | undefined, permiso: keyof typeof PERMISOS): boolean {
+  if (!roles || roles.length === 0) return false;
+  if (roles.includes(ROL.ADMIN)) return true;    // admin pasa siempre
+  const permitidos = PERMISOS[permiso] as string[];
+  return roles.some((r) => permitidos.includes(r));
 }
 
 /** Roles que pueden ver el inventario */

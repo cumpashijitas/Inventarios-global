@@ -6,6 +6,7 @@ from uuid import UUID
 
 import asyncpg
 
+from app.core.database import acquire_tenant_conn
 from app.core.exceptions import ConflictError, NotFoundError
 
 
@@ -17,18 +18,30 @@ class VentasRepository:
     # Ventas
     # ------------------------------------------------------------------
     async def next_numero_venta(self, empresa_id: UUID) -> str:
-        """Genera el siguiente número de venta correlativo: V-YYYY-NNNN."""
-        val = await self.conn.fetchval(
-            """
-            select format('V-%s-%s',
-              extract(year from now())::int,
-              lpad((count(*) + 1)::text, 4, '0'))
-            from public.ventas
-            where empresa_id = $1
-              and extract(year from fecha) = extract(year from now())
-            """,
-            empresa_id,
-        )
+        """
+        Genera el siguiente número de venta correlativo: V-YYYY-NNNN.
+        Atómico vía public.numeradores (INSERT ... ON CONFLICT DO UPDATE).
+
+        IMPORTANTE: usa su PROPIA conexión/transacción (acquire_tenant_conn),
+        no self.conn. acquire_tenant_conn envuelve TODO el request en una
+        sola transacción (lo necesita para que el SET LOCAL de RLS aplique);
+        si el numerador se incrementara con self.conn y algo más adelante en
+        el mismo request fallara (ej. un choque de otro tipo), la transacción
+        entera se revierte — incluido el incremento — y el siguiente intento
+        repetiría el mismo número. Con su propia conexión, el incremento
+        queda guardado de una vez, como una secuencia real de Postgres.
+        """
+        async with acquire_tenant_conn(str(empresa_id)) as conn:
+            val = await conn.fetchval(
+                """
+                insert into public.numeradores (empresa_id, tipo, anio, ultimo)
+                values ($1, 'venta', extract(year from now())::int, 1)
+                on conflict (empresa_id, tipo, anio) do update
+                  set ultimo = public.numeradores.ultimo + 1, updated_at = now()
+                returning format('V-%s-%s', anio, lpad(ultimo::text, 4, '0'))
+                """,
+                empresa_id,
+            )
         return val
 
     async def crear_venta(self, empresa_id: UUID, user_id: UUID | None, data: dict[str, Any]) -> dict[str, Any]:
@@ -202,17 +215,18 @@ class VentasRepository:
     # Cotizaciones
     # ------------------------------------------------------------------
     async def next_numero_cotizacion(self, empresa_id: UUID) -> str:
-        val = await self.conn.fetchval(
-            """
-            select format('COT-%s-%s',
-              extract(year from now())::int,
-              lpad((count(*) + 1)::text, 4, '0'))
-            from public.cotizaciones
-            where empresa_id = $1
-              and extract(year from fecha) = extract(year from now())
-            """,
-            empresa_id,
-        )
+        """Atómico y con conexión propia — ver next_numero_venta."""
+        async with acquire_tenant_conn(str(empresa_id)) as conn:
+            val = await conn.fetchval(
+                """
+                insert into public.numeradores (empresa_id, tipo, anio, ultimo)
+                values ($1, 'cotizacion', extract(year from now())::int, 1)
+                on conflict (empresa_id, tipo, anio) do update
+                  set ultimo = public.numeradores.ultimo + 1, updated_at = now()
+                returning format('COT-%s-%s', anio, lpad(ultimo::text, 4, '0'))
+                """,
+                empresa_id,
+            )
         return val
 
     async def crear_cotizacion(self, empresa_id: UUID, user_id: UUID | None, data: dict[str, Any]) -> dict[str, Any]:

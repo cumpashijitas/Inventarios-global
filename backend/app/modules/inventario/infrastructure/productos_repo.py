@@ -10,6 +10,7 @@ verifica el WITH CHECK.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 from uuid import UUID
 
@@ -50,6 +51,13 @@ class ProductosRepository:
             # de ella (no en cualquier posición) — así "PISTON 4A" encuentra
             # "PISTON TOYOTA MOTOR 4AGE" sin traer coincidencias a mitad de
             # palabra como "CAMISA" al buscar "MISA".
+            #
+            # "Inicio de palabra" = justo después del comienzo del texto o de
+            # cualquier carácter que NO sea letra/número — no solo un espacio.
+            # Las descripciones reales usan "/", "(", ")", "-" como separadores
+            # (ej. "3A/4A/5A/7A"), así que un LIKE '% token%' (que solo detecta
+            # espacio) se perdía coincidencias reales ahí. Con regex, "4a" sí
+            # encuentra el "4A" en "3A/4A/5A" además del de "... 4A/5A".
             columnas_busqueda = [
                 "p.nombre", "p.sku", "coalesce(p.codigo_universal,'')",
                 "coalesce(p.marca,'')", "coalesce(p.procedencia,'')",
@@ -58,14 +66,9 @@ class ProductosRepository:
                 "coalesce(p.aplicacion,'')", "coalesce(p.descripcion,'')",
             ]
             for token in search.strip().lower().split():
-                params.append(f"{token}%")
-                n = len(params)      # coincide al inicio de la columna
-                params.append(f"% {token}%")
-                m = len(params)      # coincide al inicio de una palabra dentro de la columna
-                condiciones = [
-                    f"(lower({col}) like ${n} or lower({col}) like ${m})"
-                    for col in columnas_busqueda
-                ]
+                params.append(f"(^|[^a-z0-9]){re.escape(token)}")
+                n = len(params)
+                condiciones = [f"lower({col}) ~ ${n}" for col in columnas_busqueda]
                 where_clauses.append("(" + " or ".join(condiciones) + ")")
 
         where = " and ".join(where_clauses)

@@ -24,13 +24,13 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     empresa_id: str | None = None
-    rol: str | None = None
+    roles: list[str] = []
 
 
 class EmpresaResumen(BaseModel):
     id: str
     razon_social: str
-    rol: str
+    roles: list[str]
 
 
 class ChangePasswordRequest(BaseModel):

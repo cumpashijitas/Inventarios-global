@@ -32,23 +32,27 @@ class AuthUseCases:
         user_id = supabase_token["user"]["id"]
         user_email = supabase_token["user"].get("email")
 
-        # 2. Empresas del usuario
+        # 2. Empresas del usuario (con TODOS sus roles en cada una)
         async with service_pool() as conn:
             rows = await conn.fetch(
                 """
-                select e.id, e.razon_social, r.codigo as rol
+                select e.id, e.razon_social,
+                       coalesce(array_agg(r.codigo order by r.codigo)
+                                filter (where r.codigo is not null), '{}') as roles
                   from public.usuarios_empresa ue
                   join public.empresas e on e.id = ue.empresa_id
-                  join public.roles_empresa r on r.id = ue.rol_id
+                  left join public.usuario_empresa_roles uer on uer.usuario_empresa_id = ue.id
+                  left join public.roles_empresa r on r.id = uer.rol_id
                  where ue.user_id = $1 and ue.activo = true and ue.deleted_at is null
                    and e.deleted_at is null and e.estado = 'activa'
+                 group by e.id, e.razon_social
                  order by e.razon_social
                 """,
                 user_id,
             )
 
         empresas_list = [
-            {"id": str(r["id"]), "razon_social": r["razon_social"], "rol": r["rol"]}
+            {"id": str(r["id"]), "razon_social": r["razon_social"], "roles": list(r["roles"])}
             for r in rows
         ]
 
@@ -59,7 +63,7 @@ class AuthUseCases:
                 user_id=user_id,
                 email=user_email,
                 empresa_id=empresas_list[0]["id"],
-                rol=empresas_list[0]["rol"],
+                roles=empresas_list[0]["roles"],
             )
 
         return {
@@ -81,10 +85,14 @@ class AuthUseCases:
         async with service_pool() as conn:
             row = await conn.fetchrow(
                 """
-                select r.codigo as rol
+                select ue.id,
+                       coalesce(array_agg(r.codigo order by r.codigo)
+                                filter (where r.codigo is not null), '{}') as roles
                   from public.usuarios_empresa ue
-                  join public.roles_empresa r on r.id = ue.rol_id
+                  left join public.usuario_empresa_roles uer on uer.usuario_empresa_id = ue.id
+                  left join public.roles_empresa r on r.id = uer.rol_id
                  where ue.user_id = $1 and ue.empresa_id = $2 and ue.activo = true
+                 group by ue.id
                 """,
                 claims.sub,
                 empresa_id,
@@ -96,7 +104,7 @@ class AuthUseCases:
             user_id=claims.sub,
             email=claims.email,
             empresa_id=empresa_id,
-            rol=row["rol"],
+            roles=list(row["roles"]),
         )
 
     async def refresh(self, refresh_token: str) -> dict[str, Any]:
@@ -117,11 +125,15 @@ class AuthUseCases:
         async with service_pool() as conn:
             row = await conn.fetchrow(
                 """
-                select r.codigo as rol
+                select ue.id,
+                       coalesce(array_agg(r.codigo order by r.codigo)
+                                filter (where r.codigo is not null), '{}') as roles
                   from public.usuarios_empresa ue
-                  join public.roles_empresa r on r.id = ue.rol_id
+                  left join public.usuario_empresa_roles uer on uer.usuario_empresa_id = ue.id
+                  left join public.roles_empresa r on r.id = uer.rol_id
                  where ue.user_id = $1 and ue.empresa_id = $2
                    and ue.activo = true and ue.deleted_at is null
+                 group by ue.id
                 """,
                 claims.sub,
                 claims.empresa_id,
@@ -133,7 +145,7 @@ class AuthUseCases:
             user_id=claims.sub,
             email=claims.email,
             empresa_id=claims.empresa_id,
-            rol=row["rol"],
+            roles=list(row["roles"]),
         )
 
     async def change_password(self, user_id: str, new_password: str) -> None:
@@ -147,12 +159,12 @@ class AuthUseCases:
 
     # -------------------------------------------------------------------
     def _issue_session(
-        self, *, user_id: str, email: str | None, empresa_id: str, rol: str
+        self, *, user_id: str, email: str | None, empresa_id: str, roles: list[str]
     ) -> dict[str, Any]:
         token, expires_in = issue_app_token(
             user_id=user_id,
             empresa_id=empresa_id,
-            rol=rol,
+            roles=roles,
             email=email,
         )
         return {
@@ -164,7 +176,7 @@ class AuthUseCases:
             "token_type": "bearer",
             "expires_in": expires_in,
             "empresa_id": empresa_id,
-            "rol": rol,
+            "roles": roles,
         }
 
 

@@ -37,12 +37,16 @@ from app.core.security import JWTClaims, decode_jwt
 
 @dataclass(frozen=True, slots=True)
 class TenantContext:
-    """Contexto del request: usuario + empresa + rol."""
+    """Contexto del request: usuario + empresa + roles (puede tener varios)."""
 
     user_id: str
     empresa_id: str
-    rol: str | None
+    roles: list[str]
     email: str | None
+
+    @property
+    def is_admin(self) -> bool:
+        return "admin" in self.roles
 
 
 # -----------------------------------------------------------------------------
@@ -67,7 +71,7 @@ async def get_tenant_context(claims: JWTClaims = Depends(get_jwt_claims)) -> Ten
     return TenantContext(
         user_id=claims.sub,
         empresa_id=claims.empresa_id,
-        rol=claims.rol,
+        roles=claims.roles,
         email=claims.email,
     )
 
@@ -106,7 +110,7 @@ async def check_ip_access(
     except Exception:
         return  # Token inválido → el route handler dará 401
 
-    if not claims.empresa_id or claims.rol == "admin":
+    if not claims.empresa_id or "admin" in claims.roles:
         return
 
     client_ip = _get_client_ip(request)
@@ -185,24 +189,25 @@ def require_permiso(permiso: str):
     """
 
     async def _check(ctx: TenantContext = Depends(get_tenant_context)) -> None:
-        if ctx.rol == "admin":
+        if ctx.is_admin:
             return  # admin siempre pasa
 
         async with acquire_tenant_conn(ctx.empresa_id, ctx.user_id) as conn:
-            row = await conn.fetchrow(
+            rows = await conn.fetch(
                 """
                 select r.permisos
                   from public.usuarios_empresa ue
-                  join public.roles_empresa r on r.id = ue.rol_id
+                  join public.usuario_empresa_roles uer on uer.usuario_empresa_id = ue.id
+                  join public.roles_empresa r on r.id = uer.rol_id
                  where ue.user_id = $1 and ue.empresa_id = $2 and ue.activo = true
-                 limit 1
                 """,
                 ctx.user_id,
                 ctx.empresa_id,
             )
-        if row is None:
+        if not rows:
             raise ForbiddenError("usuario no pertenece a esta empresa")
-        permisos = row["permisos"] or []
+        # Unión de los permisos de TODOS los roles del usuario.
+        permisos = {p for row in rows for p in (row["permisos"] or [])}
         if permiso not in permisos:
             raise ForbiddenError(f"falta permiso '{permiso}'")
 

@@ -120,7 +120,7 @@ async def listar_ventas(
     ctx: TenantContext = Depends(get_tenant_context),
 ) -> PageOut:
     # Admin ve todas las ventas; otros roles solo ven las suyas
-    user_id_filter = None if ctx.rol == "admin" else UUID(ctx.user_id)
+    user_id_filter = None if ctx.is_admin else UUID(ctx.user_id)
     async with acquire_tenant_conn(ctx.empresa_id, ctx.user_id) as conn:
         uc = VentasUseCases(conn)
         result = await uc.listar(

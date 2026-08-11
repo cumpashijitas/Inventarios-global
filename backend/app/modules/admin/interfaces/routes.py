@@ -43,7 +43,7 @@ def _get_client_ip(request: Request) -> str:
 
 def require_admin(ctx: TenantContext = Depends(get_tenant_context)) -> TenantContext:
     """Dependencia: solo el rol 'admin' puede acceder."""
-    if ctx.rol != "admin":
+    if not ctx.is_admin:
         raise AppError("Solo el administrador puede realizar esta acción", 403)
     return ctx
 
@@ -173,7 +173,7 @@ async def crear_usuario(
             nombre=body.nombre,
             email=body.email,
             password=body.password,
-            rol_codigo=body.rol_codigo,
+            rol_codigos=body.rol_codigos,
         )
     return UsuarioOut(**usuario)
 
@@ -191,7 +191,7 @@ async def actualizar_usuario(
             empresa_id=UUID(ctx.empresa_id),
             usuario_id=usuario_id,
             nombre=body.nombre,
-            rol_codigo=body.rol_codigo,
+            rol_codigos=body.rol_codigos,
             activo=body.activo,
         )
     return UsuarioOut(**usuario)

@@ -70,7 +70,7 @@ export default function SelectEmpresaPage() {
             )}
             <div className="flex-1 text-left">
               <div className="text-sm font-medium">{e.razon_social}</div>
-              <div className="text-xs text-muted-foreground">Rol: {e.rol}</div>
+              <div className="text-xs text-muted-foreground">Rol: {e.roles.join(", ")}</div>
             </div>
           </Button>
         ))}

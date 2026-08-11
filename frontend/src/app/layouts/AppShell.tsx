@@ -51,7 +51,7 @@ const SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 export function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const { email, rol, logout, networkBlocked, setNetworkBlocked, lastActivity, updateActivity } = useAuthStore();
+  const { email, roles, logout, networkBlocked, setNetworkBlocked, lastActivity, updateActivity } = useAuthStore();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [networkChecked, setNetworkChecked] = useState(false);
   const [pwModal, setPwModal] = useState(false);
@@ -96,7 +96,7 @@ export function AppShell() {
   }, [checkSession, updateActivity]);
 
   useEffect(() => {
-    if (rol === "admin") { setNetworkChecked(true); return; }
+    if (roles.includes("admin")) { setNetworkChecked(true); return; }
     api.get("/admin/mi-ip")
       .then(() => setNetworkChecked(true))
       .catch((err) => {
@@ -124,7 +124,7 @@ export function AppShell() {
   if (networkBlocked) return <NetworkBlockedPage />;
 
   const navItems = NAV_ITEMS.filter((item) =>
-    !item.permiso || puedeAcceder(rol, item.permiso as Parameters<typeof puedeAcceder>[1])
+    !item.permiso || puedeAcceder(roles, item.permiso as Parameters<typeof puedeAcceder>[1])
   );
 
   const handleLogout = () => {
@@ -162,7 +162,7 @@ export function AppShell() {
           collapsed={collapsed}
           onCollapse={() => setCollapsed((v) => !v)}
           navItems={navItems}
-          rol={rol}
+          roles={roles}
         />
       </aside>
 
@@ -179,7 +179,7 @@ export function AppShell() {
               onCollapse={() => setMobileOpen(false)}
               onNavigate={() => setMobileOpen(false)}
               navItems={navItems}
-              rol={rol}
+              roles={roles}
             />
           </aside>
         </div>
@@ -227,7 +227,7 @@ export function AppShell() {
                     {email}
                   </div>
                   <div className="mt-0.5 text-xs capitalize text-slate-400 dark:text-slate-500">
-                    {rol ?? "—"}
+                    {roles.length > 0 ? roles.map((r) => ROL_LABEL[r] ?? r).join(" · ") : "—"}
                   </div>
                 </div>
                 <ChevronDown
@@ -349,13 +349,13 @@ function SidebarContent({
   onCollapse,
   onNavigate,
   navItems,
-  rol,
+  roles,
 }: {
   collapsed: boolean;
   onCollapse: () => void;
   onNavigate?: () => void;
   navItems: NavItem[];
-  rol: string | null;
+  roles: string[];
 }) {
   return (
     <>
@@ -384,10 +384,10 @@ function SidebarContent({
       </div>
 
       {/* Rol badge */}
-      {!collapsed && rol && (
+      {!collapsed && roles.length > 0 && (
         <div className="mx-3 mt-2 mb-1 rounded-lg bg-slate-800 px-3 py-1.5 text-center">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            {ROL_LABEL[rol] ?? rol}
+            {roles.map((r) => ROL_LABEL[r] ?? r).join(" · ")}
           </span>
         </div>
       )}

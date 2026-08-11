@@ -7,7 +7,7 @@ import { useAuthStore } from "@/shared/stores/auth.store";
 import { ROL_LABEL } from "@/shared/config/roles";
 
 export default function MiPerfilPage() {
-  const { email, rol } = useAuthStore();
+  const { email, roles } = useAuthStore();
   const [fotoUrl, setFotoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -82,7 +82,9 @@ export default function MiPerfilPage() {
 
         <div className="w-full border-t border-slate-100 dark:border-slate-800 pt-4 space-y-1 text-sm">
           <p className="text-slate-800 dark:text-slate-100 font-medium">{email}</p>
-          <p className="text-slate-500 dark:text-slate-400 capitalize">{rol ? ROL_LABEL[rol] ?? rol : "—"}</p>
+          <p className="text-slate-500 dark:text-slate-400 capitalize">
+            {roles.length > 0 ? roles.map((r) => ROL_LABEL[r] ?? r).join(" · ") : "—"}
+          </p>
         </div>
       </div>
     </div>

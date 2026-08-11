@@ -1,8 +1,8 @@
 import {
-  ArrowLeftRight, Check, ChevronDown, Clock, Eye, FileText, MessageCircle,
+  ArrowLeftRight, Check, ChevronDown, Clock, Eye, FileText,
   Minus, Plus, Printer, Search, ShoppingCart, TrendingUp, X, XCircle,
 } from "lucide-react";
-import { useMemo } from "react";
+import { forwardRef, useMemo } from "react";
 import DevolucionesTab from "@/modules/ventas/pages/DevolucionesTab";
 import { useEffect, useRef, useState } from "react";
 import { swr, bust, peek } from "@/shared/utils/cache";
@@ -18,6 +18,9 @@ import { inventarioApi } from "@/modules/inventario/services/inventarioApi";
 import { ventasApi, type TopProducto } from "@/modules/ventas/services/ventasApi";
 import type { Cliente, Cotizacion, EmpresaPerfil, Producto, Venta } from "@/shared/types/api";
 import { fmtBs } from "@/shared/utils/format";
+import {
+  AccionesDocumento, EmpresaHeader, ReciboVenta, textoWhatsappCotizacion, textoWhatsappVenta,
+} from "@/shared/components/recibos/DocumentosVenta";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos internos
@@ -72,109 +75,13 @@ const METODOS: Record<string, string> = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Cabecera de empresa para documentos impresos
+// Documento Cotización — versión con más detalle (SKU, badge de estado,
+// aviso de vencimiento próximo) que se usa solo en "Ver Cotización" desde el
+// listado. EmpresaHeader y ReciboVenta son idénticos en NuevaVentaPage.tsx,
+// así que esos sí se comparten desde shared/components/recibos.
 // ─────────────────────────────────────────────────────────────────────────────
-function EmpresaHeader({ empresa }: { empresa: EmpresaPerfil | null }) {
-  const nombre = empresa?.nombre_comercial ?? empresa?.razon_social ?? "AUTOREPUESTOS";
-  return (
-    <div className="text-center mb-4">
-      <p className="font-bold text-base tracking-wide">{nombre.toUpperCase()}</p>
-      {empresa?.direccion && <p className="text-xs text-slate-500">{empresa.direccion}</p>}
-      {(empresa?.telefono || empresa?.ciudad) && (
-        <p className="text-xs text-slate-500">
-          {empresa.telefono ? `Tel: ${empresa.telefono}` : ""}
-          {empresa.telefono && empresa.ciudad ? " · " : ""}
-          {empresa.ciudad ?? ""}
-        </p>
-      )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Recibo de Venta — documento para imprimir / ver
-// ─────────────────────────────────────────────────────────────────────────────
-function ReciboVenta({ venta, empresa }: { venta: Venta; empresa: EmpresaPerfil | null }) {
-  const descuento = parseFloat(venta.descuento_monto ?? "0");
-  return (
-    <div className="font-mono text-xs space-y-1 max-w-[320px] mx-auto" id="print-doc">
-      <EmpresaHeader empresa={empresa} />
-      <div className="border-t border-dashed border-slate-300 my-3" />
-      <p className="text-center font-bold text-sm tracking-widest">RECIBO DE VENTA</p>
-      <p className="text-center text-slate-700">No. {venta.numero}</p>
-      <p className="text-center text-slate-500">
-        {venta.fecha} {venta.created_at?.slice(11, 16)}
-      </p>
-      <div className="border-t border-dashed border-slate-300 my-3" />
-      <div className="space-y-1">
-        <div className="flex justify-between">
-          <span className="text-slate-500">Cliente:</span>
-          <span className="font-medium text-right">{venta.cliente_nombre ?? "Cliente general"}</span>
-        </div>
-        {venta.cliente_tipo && (
-          <div className="flex justify-between">
-            <span className="text-slate-500">Tipo:</span>
-            <span className="capitalize">{venta.cliente_tipo === "mecanico" ? "Mecánico" : venta.cliente_tipo === "mayorista" ? "Mayorista" : "Particular"}</span>
-          </div>
-        )}
-        {venta.vendedor_nombre && (
-          <div className="flex justify-between">
-            <span className="text-slate-500">Vendedor:</span>
-            <span>{venta.vendedor_nombre}</span>
-          </div>
-        )}
-        <div className="flex justify-between">
-          <span className="text-slate-500">Pago:</span>
-          <span>{METODOS[venta.metodo_pago] ?? venta.metodo_pago}</span>
-        </div>
-      </div>
-      <div className="border-t border-dashed border-slate-300 my-3" />
-      <div className="flex justify-between font-semibold text-[10px] text-slate-500 pb-1">
-        <span>DESCRIPCIÓN</span><span>TOTAL</span>
-      </div>
-      {venta.items.map((it) => (
-        <div key={it.id} className="mb-1.5">
-          <div className="flex justify-between">
-            <span className="font-medium">{it.nombre}</span>
-            <span className="font-semibold">{fmtBs(it.subtotal)}</span>
-          </div>
-          <p className="text-slate-400">
-            {it.cantidad} × {fmtBs(it.precio_unitario)}
-          </p>
-        </div>
-      ))}
-      <div className="border-t border-dashed border-slate-300 my-3" />
-      {descuento > 0 && (
-        <>
-          <div className="flex justify-between text-slate-500">
-            <span>Subtotal:</span><span>{fmtBs(venta.subtotal)}</span>
-          </div>
-          <div className="flex justify-between text-red-500">
-            <span>Descuento ({venta.descuento_pct}%):</span>
-            <span>-{fmtBs(venta.descuento_monto)}</span>
-          </div>
-        </>
-      )}
-      <div className="flex justify-between font-bold text-sm">
-        <span>TOTAL A PAGAR:</span><span>{fmtBs(venta.total)}</span>
-      </div>
-      {parseFloat(venta.cambio ?? "0") > 0 && (
-        <div className="flex justify-between text-slate-500">
-          <span>Cambio:</span><span>{fmtBs(venta.cambio)}</span>
-        </div>
-      )}
-      <div className="border-t border-dashed border-slate-300 my-3" />
-      <p className="text-center font-medium">¡Gracias por su compra!</p>
-      <p className="text-center text-slate-400">Este documento no es una factura.</p>
-      <p className="text-center text-slate-400">Para factura solicítala al momento de la compra.</p>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Documento Cotización — para imprimir / WhatsApp
-// ─────────────────────────────────────────────────────────────────────────────
-function DocCotizacion({ cot, empresa }: { cot: Cotizacion; empresa: EmpresaPerfil | null }) {
+const DocCotizacion = forwardRef<HTMLDivElement, { cot: Cotizacion; empresa: EmpresaPerfil | null }>(
+  function DocCotizacion({ cot, empresa }, ref) {
   const descuento = parseFloat(cot.descuento_monto ?? "0");
   const subtotal = parseFloat(cot.subtotal ?? "0");
   const descPct = subtotal > 0 ? Math.round((descuento / subtotal) * 100) : 0;
@@ -183,7 +90,7 @@ function DocCotizacion({ cot, empresa }: { cot: Cotizacion; empresa: EmpresaPerf
     : false;
 
   return (
-    <div className="font-sans text-sm space-y-1 max-w-[360px] mx-auto" id="print-doc">
+    <div ref={ref} className="font-sans text-sm space-y-1 max-w-[360px] mx-auto bg-white p-2" id="print-doc">
       <EmpresaHeader empresa={empresa} />
       <div className="border-t border-dashed border-slate-300 my-3" />
       <p className="text-center font-bold text-sm tracking-widest">COTIZACIÓN</p>
@@ -262,7 +169,8 @@ function DocCotizacion({ cot, empresa }: { cot: Cotizacion; empresa: EmpresaPerf
       </div>
     </div>
   );
-}
+  },
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ClienteSearch — campo con autocomplete
@@ -398,6 +306,8 @@ export default function VentasPage() {
   const [modalCot, setModalCot]           = useState(false);
   const [modalRecibo, setModalRecibo]     = useState<Venta | null>(null);
   const [modalVerCot, setModalVerCot]     = useState<Cotizacion | null>(null);
+  const modalReciboRef = useRef<HTMLDivElement>(null);
+  const modalVerCotRef = useRef<HTMLDivElement>(null);
 
   // Buscadores de tabla
   const [busqVentas, setBusqVentas] = useState("");
@@ -599,31 +509,6 @@ export default function VentasPage() {
       setModalVerCot(full);
     } catch { setModalVerCot(c); }
   };
-
-  // ── WhatsApp cotización ────────────────────────────────────────────────────
-  const compartirWhatsApp = (cot: Cotizacion) => {
-    const desc = parseFloat(cot.descuento_monto ?? "0");
-    const empNombre = empresa?.nombre_comercial ?? empresa?.razon_social ?? "Autorepuestos";
-    let texto = `*${empNombre.toUpperCase()}*\n`;
-    if (empresa?.telefono) texto += `Tel: ${empresa.telefono}\n`;
-    texto += `\n*COTIZACIÓN ${cot.numero}*\n`;
-    texto += `Fecha: ${cot.fecha}\n`;
-    texto += `Válida hasta: ${cot.fecha_vence ?? `+${cot.vigencia_dias} días`}\n\n`;
-    texto += `*DETALLE:*\n`;
-    cot.items.forEach((i) => {
-      texto += `• ${i.nombre}\n  ${i.cantidad}u × ${fmtBs(i.precio_unitario)} = *${fmtBs(i.subtotal)}*\n`;
-    });
-    if (desc > 0) {
-      texto += `\nSubtotal: ${fmtBs(cot.subtotal)}\nDescuento: -${fmtBs(cot.descuento_monto)}\n`;
-    }
-    texto += `\n*TOTAL: ${fmtBs(cot.total)}*\n`;
-    if (cot.notas) texto += `\n_${cot.notas}_\n`;
-    texto += `\n_Esta cotización no genera compromiso de compra._`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank");
-  };
-
-  // ── Imprimir ───────────────────────────────────────────────────────────────
-  const imprimir = () => window.print();
 
   // ── Cotizaciones filtradas ────────────────────────────────────────────────
   const cotsFiltradas = cotizaciones.filter((c) => {
@@ -952,16 +837,20 @@ export default function VentasPage() {
       <Dialog open={!!modalRecibo} onOpenChange={() => setModalRecibo(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <DialogTitle className="flex items-center gap-2 text-base">
                 <Printer className="h-4 w-4" /> Recibo de Venta
               </DialogTitle>
-              <Button variant="outline" size="sm" className="gap-1 text-xs" onClick={imprimir}>
-                <Printer className="h-3.5 w-3.5" /> Imprimir
-              </Button>
+              {modalRecibo && (
+                <AccionesDocumento
+                  docRef={modalReciboRef}
+                  nombreArchivo={`venta_${modalRecibo.numero}`}
+                  textoWhatsapp={textoWhatsappVenta(modalRecibo, empresa)}
+                />
+              )}
             </div>
           </DialogHeader>
-          {modalRecibo && <ReciboVenta venta={modalRecibo} empresa={empresa} />}
+          {modalRecibo && <ReciboVenta ref={modalReciboRef} venta={modalRecibo} empresa={empresa} />}
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalRecibo(null)}>Cerrar</Button>
           </DialogFooter>
@@ -978,19 +867,16 @@ export default function VentasPage() {
               <DialogTitle className="flex items-center gap-2 text-base">
                 <FileText className="h-4 w-4" /> Cotización
               </DialogTitle>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="gap-1 text-xs" onClick={imprimir}>
-                  <Printer className="h-3.5 w-3.5" /> Imprimir
-                </Button>
-                {modalVerCot && (
-                  <Button size="sm" className="gap-1 text-xs bg-green-600 hover:bg-green-700 text-white" onClick={() => compartirWhatsApp(modalVerCot)}>
-                    <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
-                  </Button>
-                )}
-              </div>
+              {modalVerCot && (
+                <AccionesDocumento
+                  docRef={modalVerCotRef}
+                  nombreArchivo={`cotizacion_${modalVerCot.numero}`}
+                  textoWhatsapp={textoWhatsappCotizacion(modalVerCot, empresa)}
+                />
+              )}
             </div>
           </DialogHeader>
-          {modalVerCot && <DocCotizacion cot={modalVerCot} empresa={empresa} />}
+          {modalVerCot && <DocCotizacion ref={modalVerCotRef} cot={modalVerCot} empresa={empresa} />}
           <DialogFooter className="gap-2">
             {modalVerCot && modalVerCot.estado !== "aprobada" && (
               <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white gap-1" onClick={() => { cambiarEstado(modalVerCot.id, "aprobada"); setModalVerCot(null); }}>

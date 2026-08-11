@@ -14,7 +14,7 @@ interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
   empresaId: string | null;
-  rol: string | null;
+  roles: string[];
   email: string | null;
   empresasDisponibles: EmpresaResumen[];
   networkBlocked: boolean;
@@ -34,7 +34,7 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
       empresaId: null,
-      rol: null,
+      roles: [],
       email: null,
       empresasDisponibles: [],
       networkBlocked: false,
@@ -45,7 +45,7 @@ export const useAuthStore = create<AuthState>()(
           accessToken: t.access_token,
           refreshToken: t.refresh_token,
           empresaId: t.empresa_id ?? null,
-          rol: t.rol ?? null,
+          roles: t.roles ?? [],
           lastActivity: Date.now(),
         }),
       setEmail: (email) => set({ email }),
@@ -57,7 +57,7 @@ export const useAuthStore = create<AuthState>()(
           accessToken: null,
           refreshToken: null,
           empresaId: null,
-          rol: null,
+          roles: [],
           email: null,
           empresasDisponibles: [],
           lastActivity: null,
@@ -70,7 +70,7 @@ export const useAuthStore = create<AuthState>()(
         accessToken: state.accessToken,
         refreshToken: state.refreshToken,
         empresaId: state.empresaId,
-        rol: state.rol,
+        roles: state.roles,
         email: state.email,
         lastActivity: state.lastActivity,
       }),

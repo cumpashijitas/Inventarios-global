@@ -32,6 +32,15 @@ function RolBadge({ codigo }: { codigo: string }) {
   );
 }
 
+function RolBadges({ codigos }: { codigos: string[] }) {
+  if (codigos.length === 0) return <span className="text-xs text-slate-400">—</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {codigos.map((c) => <RolBadge key={c} codigo={c} />)}
+    </div>
+  );
+}
+
 function Avatar({ nombre }: { nombre: string }) {
   const initials = nombre.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
   return (
@@ -185,7 +194,7 @@ function TabUsuarios() {
   const [error, setError]       = useState<string | null>(null);
 
   // Form para crear/editar
-  const [form, setForm] = useState({ nombre: "", email: "", password: "", rol_codigo: "" });
+  const [form, setForm] = useState({ nombre: "", email: "", password: "", rol_codigos: [] as string[] });
 
   const cargar = async () => {
     setLoading(true);
@@ -200,26 +209,31 @@ function TabUsuarios() {
   useEffect(() => { cargar(); }, []);
 
   const abrirCrear = () => {
-    setForm({ nombre: "", email: "", password: "", rol_codigo: roles[1]?.codigo ?? "vendedor" });
+    setForm({ nombre: "", email: "", password: "", rol_codigos: roles[1] ? [roles[1].codigo] : ["vendedor"] });
     setError(null);
     setModal({ open: true, usuario: null });
   };
 
   const abrirEditar = (u: UsuarioAdmin) => {
-    setForm({ nombre: u.nombre, email: u.email, password: "", rol_codigo: u.rol_codigo });
+    setForm({ nombre: u.nombre, email: u.email, password: "", rol_codigos: u.rol_codigos });
     setError(null);
     setModal({ open: true, usuario: u });
   };
 
   const handleGuardar = async () => {
     setError(null);
+    if (form.rol_codigos.length === 0) {
+      setError("Selecciona al menos un rol"); return;
+    }
     setSaving(true);
     try {
       if (modal.usuario) {
         // Editar
         const body: Record<string, unknown> = {};
         if (form.nombre !== modal.usuario.nombre) body.nombre = form.nombre;
-        if (form.rol_codigo !== modal.usuario.rol_codigo) body.rol_codigo = form.rol_codigo;
+        const mismosRoles = form.rol_codigos.length === modal.usuario.rol_codigos.length
+          && form.rol_codigos.every((c) => modal.usuario!.rol_codigos.includes(c));
+        if (!mismosRoles) body.rol_codigos = form.rol_codigos;
         await adminApi.updateUsuario(modal.usuario.id, body);
       } else {
         // Crear
@@ -284,7 +298,7 @@ function TabUsuarios() {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-slate-500">{u.email}</td>
-                <td className="px-4 py-3"><RolBadge codigo={u.rol_codigo} /></td>
+                <td className="px-4 py-3"><RolBadges codigos={u.rol_codigos} /></td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${u.activo ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>
                     {u.activo ? "• Activo" : "• Inactivo"}
@@ -327,23 +341,58 @@ function TabUsuarios() {
               </>
             )}
             <div>
-              <Label className="text-xs font-semibold text-slate-600">Rol</Label>
-              <select
-                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                value={form.rol_codigo}
-                onChange={(e) => setForm((p) => ({ ...p, rol_codigo: e.target.value }))}
-              >
-                {roles.map((r) => (
-                  <option key={r.codigo} value={r.codigo}>{r.nombre}</option>
-                ))}
-              </select>
+              <Label className="text-xs font-semibold text-slate-600">
+                Rol{form.rol_codigos.length > 1 ? "es" : ""} * <span className="font-normal text-slate-400">(Administrador es exclusivo; los demás se pueden combinar, hasta 3)</span>
+              </Label>
+              <div className="mt-1.5 space-y-1.5">
+                {roles.map((r) => {
+                  const esAdmin = r.codigo === "admin";
+                  const checked = form.rol_codigos.includes(r.codigo);
+                  const deshabilitado = !esAdmin && form.rol_codigos.includes("admin");
+                  return (
+                    <label
+                      key={r.codigo}
+                      className={`flex items-center gap-2 rounded-md border px-3 py-2 transition-colors ${
+                        checked ? "border-indigo-300 bg-indigo-50" : "border-slate-200 hover:bg-slate-50"
+                      } ${deshabilitado ? "opacity-40 pointer-events-none" : "cursor-pointer"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => setForm((p) => {
+                          if (esAdmin) {
+                            // Admin es exclusivo: marcarlo limpia todo lo demás
+                            return { ...p, rol_codigos: checked ? [] : ["admin"] };
+                          }
+                          const sinAdmin = p.rol_codigos.filter((c) => c !== "admin");
+                          return {
+                            ...p,
+                            rol_codigos: checked
+                              ? sinAdmin.filter((c) => c !== r.codigo)
+                              : [...sinAdmin, r.codigo],
+                          };
+                        })}
+                        className="h-4 w-4 rounded border-slate-300 text-indigo-600"
+                      />
+                      <span className="text-sm font-medium text-slate-700">{r.nombre}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              {form.rol_codigos.length === 0 && (
+                <p className="mt-1 text-[11px] text-orange-500">Selecciona al menos un rol.</p>
+              )}
             </div>
-            {/* Descripción del rol seleccionado */}
-            {form.rol_codigo && (
-              <p className="text-xs text-slate-400 bg-slate-50 rounded-lg px-3 py-2">
-                {roles.find((r) => r.codigo === form.rol_codigo)?.descripcion}
-              </p>
-            )}
+            {/* Descripción de los roles seleccionados */}
+            {form.rol_codigos.map((codigo) => {
+              const r = roles.find((x) => x.codigo === codigo);
+              if (!r?.descripcion) return null;
+              return (
+                <p key={codigo} className="text-xs text-slate-400 bg-slate-50 rounded-lg px-3 py-2">
+                  <span className="font-semibold text-slate-500">{r.nombre}:</span> {r.descripcion}
+                </p>
+              );
+            })}
             {error && (
               <div className="rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-600">
                 {error}

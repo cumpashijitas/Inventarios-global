@@ -91,7 +91,7 @@ async def me(claims: JWTClaims = Depends(get_jwt_claims)) -> dict:
         "user_id": claims.sub,
         "email": claims.email,
         "empresa_id": claims.empresa_id,
-        "rol": claims.rol,
+        "roles": claims.roles,
         "foto_url": foto_url,
     }
 

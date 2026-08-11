@@ -23,6 +23,31 @@ class AdminUseCases:
     async def listar_usuarios(self, empresa_id: UUID) -> list[dict]:
         return await self.repo.listar_usuarios(empresa_id)
 
+    async def _resolver_roles(self, empresa_id: UUID, rol_codigos: list[str]) -> list[UUID]:
+        """Valida la combinación de roles y devuelve sus IDs.
+
+        Reglas: mínimo 1 rol siempre. 'admin' es exclusivo (no se combina con
+        otros). Los demás (vendedor, encargado_inventario, cajero) se pueden
+        combinar libremente, hasta 3 a la vez.
+        """
+        if not rol_codigos:
+            raise AppError("El usuario debe tener al menos un rol", 422)
+        codigos_unicos = set(rol_codigos)
+        if len(codigos_unicos) != len(rol_codigos):
+            raise AppError("No repitas el mismo rol más de una vez", 422)
+        if "admin" in codigos_unicos and len(codigos_unicos) > 1:
+            raise AppError("El rol Administrador no se puede combinar con otros roles", 422)
+        if "admin" not in codigos_unicos and len(codigos_unicos) > 3:
+            raise AppError("Un usuario puede tener máximo 3 roles (sin contar Administrador)", 422)
+
+        rol_ids: list[UUID] = []
+        for codigo in rol_codigos:
+            rol = await self.repo.get_rol_by_codigo(empresa_id, codigo)
+            if not rol:
+                raise AppError(f"El rol '{codigo}' no existe para esta empresa", 422)
+            rol_ids.append(UUID(str(rol["id"])))
+        return rol_ids
+
     async def crear_usuario(
         self,
         empresa_id: UUID,
@@ -30,15 +55,13 @@ class AdminUseCases:
         nombre: str,
         email: str,
         password: str,
-        rol_codigo: str,
+        rol_codigos: list[str],
     ) -> dict:
         from app.modules.auth.infrastructure.supabase_auth import SupabaseAuthAdapter
         from app.core.config import settings
 
-        # 1. Verificar que el rol existe para esta empresa
-        rol = await self.repo.get_rol_by_codigo(empresa_id, rol_codigo)
-        if not rol:
-            raise AppError(f"El rol '{rol_codigo}' no existe para esta empresa", 422)
+        # 1. Validar la combinación de roles
+        rol_ids = await self._resolver_roles(empresa_id, rol_codigos)
 
         # 2. Crear usuario en Supabase Auth
         adapter = SupabaseAuthAdapter(
@@ -51,19 +74,16 @@ class AdminUseCases:
         except ValueError as e:
             raise AppError(str(e), 409)
 
-        # 3. Insertar en usuarios_empresa
+        # 3. Insertar en usuarios_empresa + usuario_empresa_roles
         usuario = await self.repo.crear_usuario(
             empresa_id=empresa_id,
             user_id=UUID(auth_user_id),
             nombre=nombre,
             email=email,
-            rol_id=UUID(str(rol["id"])),
+            rol_ids=rol_ids,
             invitado_por=admin_user_id,
         )
-
-        # Enriquecer con datos del rol para el response
-        usuario["rol_codigo"] = rol["codigo"]
-        usuario["rol_nombre"] = rol["nombre"]
+        usuario["rol_codigos"] = rol_codigos
         return usuario
 
     async def actualizar_usuario(
@@ -71,34 +91,22 @@ class AdminUseCases:
         empresa_id: UUID,
         usuario_id: UUID,
         nombre: str | None,
-        rol_codigo: str | None,
+        rol_codigos: list[str] | None,
         activo: bool | None,
     ) -> dict:
-        rol_id = None
-        rol_codigo_final = None
-        rol_nombre_final = None
-
-        if rol_codigo is not None:
-            rol = await self.repo.get_rol_by_codigo(empresa_id, rol_codigo)
-            if not rol:
-                raise AppError(f"El rol '{rol_codigo}' no existe para esta empresa", 422)
-            rol_id = UUID(str(rol["id"]))
-            rol_codigo_final = rol["codigo"]
-            rol_nombre_final = rol["nombre"]
+        rol_ids = None
+        if rol_codigos is not None:
+            rol_ids = await self._resolver_roles(empresa_id, rol_codigos)
 
         updated = await self.repo.actualizar_usuario(
             empresa_id=empresa_id,
             usuario_id=usuario_id,
             nombre=nombre,
-            rol_id=rol_id,
+            rol_ids=rol_ids,
             activo=activo,
         )
         if not updated:
             raise AppError("Usuario no encontrado", 404)
-
-        if rol_codigo_final:
-            updated["rol_codigo"] = rol_codigo_final
-            updated["rol_nombre"] = rol_nombre_final
 
         return updated
 

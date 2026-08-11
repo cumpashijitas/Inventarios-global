@@ -7,10 +7,10 @@ import { inventarioApi, type StockBajoItem } from "@/modules/inventario/services
 
 export default function ReporteBajoStockPage() {
   const navigate = useNavigate();
-  const rol = useAuthStore((s) => s.rol);
+  const roles = useAuthStore((s) => s.roles);
 
   // Solo admin puede ver esta página
-  if (!puedeAcceder(rol, "inventario_editar")) {
+  if (!puedeAcceder(roles, "inventario_editar")) {
     navigate("/", { replace: true });
     return null;
   }

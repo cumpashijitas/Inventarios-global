@@ -26,8 +26,7 @@ class UsuarioOut(BaseModel):
     user_id: UUID
     nombre: str
     email: str
-    rol_codigo: str
-    rol_nombre: str
+    rol_codigos: list[str]
     activo: bool
     created_at: datetime
 
@@ -36,12 +35,12 @@ class UsuarioCreateIn(BaseModel):
     nombre: str = Field(min_length=2, max_length=100)
     email: EmailStr
     password: str = Field(min_length=6, max_length=72)
-    rol_codigo: str = Field(min_length=1, max_length=50)
+    rol_codigos: list[str] = Field(min_length=1, max_length=3)
 
 
 class UsuarioUpdateIn(BaseModel):
     nombre: str | None = Field(default=None, min_length=2, max_length=100)
-    rol_codigo: str | None = Field(default=None, min_length=1, max_length=50)
+    rol_codigos: list[str] | None = Field(default=None, min_length=1, max_length=3)
     activo: bool | None = None
 
 

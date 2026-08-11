@@ -71,9 +71,9 @@ export default function InventarioPage() {
   const [soloBajoStock, setSoloBajoStock] = useState(false);
   const [masVendidos, setMasVendidos] = useState(false);
   const [modalPedido, setModalPedido] = useState(false);
-  const rol = useAuthStore((s) => s.rol);
+  const roles = useAuthStore((s) => s.roles);
   // vendedor solo puede ver — no puede agregar/editar/eliminar productos, proveedores ni categorías
-  const puedeEditar = puedeAcceder(rol, "inventario_editar");
+  const puedeEditar = puedeAcceder(roles, "inventario_editar");
 
   // Datos del servidor
   const [productos, setProductos]   = useState<Producto[]>([]);

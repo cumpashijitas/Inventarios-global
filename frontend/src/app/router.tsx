@@ -20,7 +20,6 @@ const InventarioPage    = lazy(() => import("@/modules/inventario/pages/Inventar
 // Rutas individuales conservadas (acceso directo y breadcrumbs futuros)
 const ProductosPage     = lazy(() => import("@/modules/inventario/pages/ProductosPage"));
 const AlmacenesPage     = lazy(() => import("@/modules/inventario/pages/AlmacenesPage"));
-const StockPage         = lazy(() => import("@/modules/inventario/pages/StockPage"));
 const MovimientosPage   = lazy(() => import("@/modules/inventario/pages/MovimientosPage"));
 
 // ── Ventas ───────────────────────────────────────────────────────────────────
@@ -43,9 +42,7 @@ const RecepcionesPage   = lazy(() => import("@/modules/compras/pages/Recepciones
 // ── Reportes ─────────────────────────────────────────────────────────────────
 // TODO: conectar con endpoints analíticos del backend
 const ReportesPage           = lazy(() => import("@/modules/reportes/pages/ReportesPage"));
-const ReporteInventarioPage  = lazy(() => import("@/modules/reportes/pages/ReporteInventarioPage"));
 const ReporteVentasPage      = lazy(() => import("@/modules/reportes/pages/ReporteVentasPage"));
-const ReporteMovimientosPage = lazy(() => import("@/modules/reportes/pages/ReporteMovimientosPage"));
 const ReporteBajoStockPage   = lazy(() => import("@/modules/reportes/pages/ReporteBajoStockPage"));
 
 // ── Administración ───────────────────────────────────────────────────────────
@@ -72,8 +69,8 @@ function ProtectedRoute() {
  * lo redirige al dashboard en vez de mostrar la página.
  */
 function RoleGuard({ permiso }: { permiso: Parameters<typeof puedeAcceder>[1] }) {
-  const rol = useAuthStore((s) => s.rol);
-  if (!puedeAcceder(rol, permiso)) return <Navigate to="/" replace />;
+  const roles = useAuthStore((s) => s.roles);
+  if (!puedeAcceder(roles, permiso)) return <Navigate to="/" replace />;
   return <Outlet />;
 }
 
@@ -118,7 +115,6 @@ const routes: RouteObject[] = [
               { path: "/inventario",               element: <S><InventarioPage /></S> },
               { path: "/inventario/productos",     element: <S><ProductosPage /></S> },
               { path: "/inventario/almacenes",     element: <S><AlmacenesPage /></S> },
-              { path: "/inventario/stock",         element: <S><StockPage /></S> },
               { path: "/inventario/movimientos",   element: <S><MovimientosPage /></S> },
             ],
           },
@@ -157,9 +153,7 @@ const routes: RouteObject[] = [
 
           // ── Reportes (todos los roles) ─────────────────────────────────────
           { path: "/reportes",                       element: <S><ReportesPage /></S> },
-          { path: "/reportes/inventario",            element: <S><ReporteInventarioPage /></S> },
           { path: "/reportes/ventas",                element: <S><ReporteVentasPage /></S> },
-          { path: "/reportes/movimientos",           element: <S><ReporteMovimientosPage /></S> },
           { path: "/reportes/bajo-stock",            element: <S><ReporteBajoStockPage /></S> },
 
           // ── Configuración (solo admin) ─────────────────────────────────────

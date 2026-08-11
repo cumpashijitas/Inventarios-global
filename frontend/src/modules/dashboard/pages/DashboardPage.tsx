@@ -246,8 +246,8 @@ export default function DashboardPage() {
   const [alertasStockActivas, setAlertasStockActivas] = useState(true);
   const [enviandoReporte, setEnviandoReporte] = useState(false);
   const [reporteMsg, setReporteMsg] = useState<string | null>(null);
-  const rol = useAuthStore((s) => s.rol);
-  const esAdmin = rol === "admin";
+  const roles = useAuthStore((s) => s.roles);
+  const esAdmin = roles.includes("admin");
   const mounted = useRef(true);
 
   const cargar = async (showRefresh = false) => {

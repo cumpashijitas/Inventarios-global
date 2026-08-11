@@ -25,7 +25,7 @@ from app.core.exceptions import UnauthorizedError
 class JWTClaims:
     sub: str                  # user_id (auth.users.id de Supabase)
     empresa_id: str | None    # uuid de la empresa activa
-    rol: str | None
+    roles: list[str]          # ej. ["encargado_inventario", "vendedor"] — puede tener varios
     email: str | None
     raw: dict[str, Any]
 
@@ -34,7 +34,7 @@ def issue_app_token(
     *,
     user_id: str,
     empresa_id: str | None,
-    rol: str | None,
+    roles: list[str],
     email: str | None,
     expires_minutes: int | None = None,
 ) -> tuple[str, int]:
@@ -52,7 +52,7 @@ def issue_app_token(
         "aud": settings.jwt_audience,
         "sub": user_id,
         "empresa_id": empresa_id,
-        "rol": rol,
+        "roles": roles,
         "email": email,
         "iat": now,
         "exp": exp,
@@ -81,7 +81,7 @@ def decode_jwt(token: str) -> JWTClaims:
     return JWTClaims(
         sub=str(payload["sub"]),
         empresa_id=payload.get("empresa_id"),
-        rol=payload.get("rol"),
+        roles=payload.get("roles") or [],
         email=payload.get("email"),
         raw=payload,
     )
