@@ -1,6 +1,6 @@
 import {
   AlertTriangle, BookOpen, Building2, Car, Copy, CreditCard, Download, Eye, FileDown, FolderOpen,
-  Gem, ImageIcon, Info, Mail, MapPin, Package, Pencil, Phone, Printer,
+  Gem, ImageIcon, Info, Loader2, Mail, MapPin, Package, Pencil, Phone, Printer,
   Plus, Ruler, Search, ShieldCheck, Tag, Trash2, TrendingUp, User, X, Check,
 } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
@@ -62,6 +62,46 @@ function AccionesBtn({ onVer, onCopiar, onEditar, onEliminar }: { onVer?: () => 
   );
 }
 
+// ── Edición inline de fila (tabla administrador de productos, sin modal) ──────
+type EditDraft = {
+  codigo_universal: string; nombre: string; stock_minimo: string;
+  marca: string; procedencia: string;
+  precio_compra: string; costo_caja: string; precio_venta: string;
+  precio_mayor: string; precio_mecanico: string; precio_real: string;
+  categoria_id: string; industria: string; modelos: string; medidas: string;
+  proveedor_id: string; aplicacion: string; descripcion: string;
+};
+const inlineInputClass =
+  "w-full rounded border border-indigo-300 bg-white px-1 py-0.5 text-[11px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500";
+function CampoInline({ value, onChange, type = "text", className = "" }: {
+  value: string; onChange: (v: string) => void; type?: string; className?: string;
+}) {
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      className={`${inlineInputClass} ${className}`}
+    />
+  );
+}
+function SelectInline({ value, onChange, options, className = "" }: {
+  value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; className?: string;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      className={`${inlineInputClass} ${className}`}
+    >
+      <option value="">—</option>
+      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Página principal
 // ─────────────────────────────────────────────────────────────────────────────
@@ -87,6 +127,11 @@ export default function InventarioPage() {
 
   // Estado de selección de filas (para selección múltiple)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Edición inline de una fila de producto (sin modal) — tabla administrador
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
 
   // Anchos redimensionables de columnas sticky
   const [skuColWidth,  setSkuColWidth]  = useState(130);
@@ -353,6 +398,78 @@ export default function InventarioPage() {
   };
 
   const abrirVerProducto = (p: Producto) => setVerModal({ open: true, item: p });
+
+  // ── Edición inline de fila (sin modal) ───────────────────────────────────
+  const iniciarEdicionInline = (p: Producto) => {
+    clearSelection();
+    setEditDraft({
+      codigo_universal: p.codigo_universal ?? "",
+      nombre: p.nombre ?? "",
+      stock_minimo: String(Math.round(parseFloat(p.stock_minimo)) || 0),
+      marca: p.marca ?? "",
+      procedencia: p.procedencia ?? "",
+      precio_compra: p.precio_compra ?? "",
+      costo_caja: p.costo_caja ?? "",
+      precio_venta: p.precio_venta ?? "",
+      precio_mayor: p.precio_mayor ?? "",
+      precio_mecanico: p.precio_mecanico ?? "",
+      precio_real: p.precio_real ?? "",
+      categoria_id: p.categoria_id ?? "",
+      industria: p.industria ?? "",
+      modelos: p.modelos ?? "",
+      medidas: p.medidas ?? "",
+      proveedor_id: p.proveedor_id ?? "",
+      aplicacion: p.aplicacion ?? "",
+      descripcion: p.descripcion ?? "",
+    });
+    setEditingId(p.id);
+  };
+
+  const cancelarEdicionInline = () => {
+    if (editSaving) return;
+    setEditingId(null);
+    setEditDraft(null);
+  };
+
+  const guardarEdicionInline = async () => {
+    if (!editingId || !editDraft) return;
+    if (!editDraft.nombre.trim()) {
+      toast.error("El nombre no puede estar vacío.");
+      return;
+    }
+    setEditSaving(true);
+    try {
+      const numOrNull = (v: string) => (v.trim() === "" ? null : Number(v));
+      await inventarioApi.updateProducto(editingId, {
+        codigo_universal: editDraft.codigo_universal.trim() || null,
+        nombre: editDraft.nombre.trim(),
+        stock_minimo: Number(editDraft.stock_minimo) || 0,
+        marca: editDraft.marca.trim() || null,
+        procedencia: editDraft.procedencia.trim() || null,
+        precio_compra: Number(editDraft.precio_compra) || 0,
+        costo_caja: numOrNull(editDraft.costo_caja),
+        precio_venta: Number(editDraft.precio_venta) || 0,
+        precio_mayor: numOrNull(editDraft.precio_mayor),
+        precio_mecanico: numOrNull(editDraft.precio_mecanico),
+        precio_real: numOrNull(editDraft.precio_real),
+        categoria_id: editDraft.categoria_id || null,
+        industria: editDraft.industria.trim() || null,
+        modelos: editDraft.modelos.trim() || null,
+        medidas: editDraft.medidas.trim() || null,
+        proveedor_id: editDraft.proveedor_id || null,
+        aplicacion: editDraft.aplicacion.trim() || null,
+        descripcion: editDraft.descripcion.trim() || null,
+      });
+      toast.success("Producto actualizado correctamente");
+      setEditingId(null);
+      setEditDraft(null);
+      await recargarTras();
+    } catch {
+      toast.error("Error al actualizar el producto");
+    } finally {
+      setEditSaving(false);
+    }
+  };
 
   const abrirClonarProducto = (p: Producto) => {
     setClonarForm({
@@ -875,8 +992,23 @@ export default function InventarioPage() {
             </div>
           ) : (
             <div className="flex-1 min-h-0 flex flex-col">
+              {/* Barra de edición inline — reemplaza a la de selección mientras se edita una fila */}
+              {editingId && (
+                <div className="shrink-0 z-20 bg-emerald-600 text-white shadow-md px-5 py-2.5 flex flex-wrap items-center gap-y-2 gap-x-4 border-b-2 border-emerald-700">
+                  <span className="text-sm font-semibold">Editando producto — los cambios se guardan al hacer clic en Guardar</span>
+                  <div className="flex items-center gap-2 ml-auto">
+                    <Button size="sm" variant="ghost" className="text-white hover:bg-emerald-500 gap-1.5 h-8" disabled={editSaving} onClick={guardarEdicionInline}>
+                      {editSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Guardar
+                    </Button>
+                    <Button size="sm" variant="ghost" className="text-white hover:bg-emerald-500 gap-1.5 h-8" disabled={editSaving} onClick={cancelarEdicionInline}>
+                      <X className="h-4 w-4" /> Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* Barra de selección — en flujo normal, arriba de la tabla (no la tapa) */}
-              {selectedIds.size > 0 && (
+              {!editingId && selectedIds.size > 0 && (
                 <div className="shrink-0 z-20 bg-indigo-600 text-white shadow-md px-5 py-2.5 flex flex-wrap items-center gap-y-2 gap-x-4 border-b-2 border-indigo-700">
                   <span className="text-sm font-semibold">{selectedIds.size} seleccionado{selectedIds.size > 1 ? "s" : ""}</span>
                   <div className="hidden sm:block h-4 w-px bg-indigo-400" />
@@ -893,7 +1025,7 @@ export default function InventarioPage() {
                               <Button size="sm" variant="ghost" className="text-white hover:bg-indigo-500 gap-1.5 h-8" onClick={() => { abrirClonarProducto(p); clearSelection(); }}>
                                 <Copy className="h-4 w-4" /> Clonar
                               </Button>
-                              <Button size="sm" variant="ghost" className="text-white hover:bg-indigo-500 gap-1.5 h-8" onClick={() => { abrirEditarProducto(p); clearSelection(); }}>
+                              <Button size="sm" variant="ghost" className="text-white hover:bg-indigo-500 gap-1.5 h-8" onClick={() => iniciarEdicionInline(p)}>
                                 <Pencil className="h-4 w-4" /> Editar
                               </Button>
                             </>
@@ -1027,15 +1159,22 @@ export default function InventarioPage() {
                         const minNum = Math.round(parseFloat(p.stock_minimo));
                         const stockColor = stockNum === 0 ? "text-red-600 font-bold" : stockNum < minNum ? "text-orange-500 font-bold" : "text-slate-800 font-semibold";
                         const isSelected = selectedIds.has(p.id);
-                        const bg = isSelected ? 'var(--row-selected)' : idx % 2 === 0 ? 'var(--row-even)' : 'var(--row-odd)';
+                        const draft = editingId === p.id ? editDraft : null;
+                        const isEditing = !!draft;
+                        const bg = isEditing ? 'var(--row-selected)' : isSelected ? 'var(--row-selected)' : idx % 2 === 0 ? 'var(--row-even)' : 'var(--row-odd)';
                         const C = "border border-slate-200 px-2 py-1 whitespace-nowrap";
                         const S = "border border-slate-200 px-1 py-1 sticky z-20";
+                        const setDraft = (campo: keyof EditDraft, valor: string) =>
+                          setEditDraft((d) => (d ? { ...d, [campo]: valor } : d));
                         return (
-                          <tr key={p.id} style={{ backgroundColor: bg }} className={`${isSelected ? "border-l-4 border-l-indigo-600" : ""} hover:brightness-95 ${!p.activo ? "opacity-50" : ""}`}>
+                          <tr key={p.id} style={{ backgroundColor: bg }}
+                            className={`${isSelected || isEditing ? "border-l-4 border-l-indigo-600" : ""} hover:brightness-95 ${!p.activo ? "opacity-50" : ""}`}
+                            onDoubleClick={() => { if (puedeEditar && !editingId) iniciarEdicionInline(p); }}
+                          >
                             {/* Sticky: FOTO */}
                             <td className={S} style={{ left: 0, width: W_FOTO, minWidth: W_FOTO, maxWidth: W_FOTO, backgroundColor: bg }}>
                               <div className="flex items-center gap-1">
-                                <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(p.id)}
+                                <input type="checkbox" checked={isSelected} disabled={!!editingId} onChange={() => toggleSelect(p.id)}
                                   className="h-3.5 w-3.5 flex-shrink-0 rounded border-slate-300 text-indigo-600 cursor-pointer" />
                                 <div className="w-7 h-7 rounded overflow-hidden bg-slate-100 flex-shrink-0 flex items-center justify-center">
                                   {p.imagen_url ? <img src={p.imagen_url} alt="" loading="lazy" className="w-full h-full object-cover" /> : <ImageIcon className="h-3 w-3 text-slate-300" />}
@@ -1045,31 +1184,103 @@ export default function InventarioPage() {
                             {/* Sticky: CÓDIGO */}
                             <td className={`${S} font-mono text-indigo-700 font-semibold`} style={{ left: L_SKU, width: skuColWidth, minWidth: skuColWidth, maxWidth: skuColWidth, backgroundColor: bg }}>{p.sku}</td>
                             {/* Sticky: CÓD. UNIV. */}
-                            <td className={`${S} font-mono text-slate-500`} style={{ left: L_UNIV, width: univColWidth, minWidth: univColWidth, maxWidth: univColWidth, backgroundColor: bg }}>{p.codigo_universal ?? "—"}</td>
+                            <td className={`${S} font-mono text-slate-500`} style={{ left: L_UNIV, width: univColWidth, minWidth: univColWidth, maxWidth: univColWidth, backgroundColor: bg }}>
+                              {draft
+                                ? <CampoInline value={draft.codigo_universal} onChange={(v) => setDraft("codigo_universal", v)} />
+                                : (p.codigo_universal ?? "—")}
+                            </td>
                             {/* Sticky: DESCRIPCIÓN (resizable) */}
                             <td className={`${S} text-slate-800 overflow-hidden`} style={{ left: L_DESC, width: prodColWidth, minWidth: prodColWidth, maxWidth: prodColWidth, backgroundColor: bg }}>
-                              <span className="block truncate">{p.nombre}</span>
+                              {draft
+                                ? <CampoInline value={draft.nombre} onChange={(v) => setDraft("nombre", v)} />
+                                : <span className="block truncate">{p.nombre}</span>}
                             </td>
                             {/* Scrollables */}
                             <td className={`${C} text-center ${stockColor}`}>{stockNum}</td>
-                            <td className={`${C} text-center text-slate-500`}>{minNum}</td>
+                            <td className={`${C} text-center text-slate-500`}>
+                              {draft
+                                ? <CampoInline type="number" className="text-center" value={draft.stock_minimo} onChange={(v) => setDraft("stock_minimo", v)} />
+                                : minNum}
+                            </td>
                             <td className={`${C} text-center text-emerald-600 font-semibold`}>{Math.round(Number(p.vendidos ?? 0))}</td>
                             <td className={`${C} text-center text-slate-600`}>{unidCodigo}</td>
-                            <td className={`${C} text-slate-600`}>{p.marca ?? "—"}</td>
-                            <td className={`${C} text-slate-600`}>{p.procedencia ?? "—"}</td>
-                            <td className={`${C} text-right text-slate-700`}>{fmtBs(p.precio_compra)}</td>
-                            <td className={`${C} text-right text-slate-500`}>{p.costo_caja ? fmtBs(p.costo_caja) : "—"}</td>
-                            <td className={`${C} text-right font-semibold text-emerald-700`}>{fmtBs(p.precio_venta)}</td>
-                            <td className={`${C} text-right text-slate-700`}>{p.precio_mayor ? fmtBs(p.precio_mayor) : "—"}</td>
-                            <td className={`${C} text-right text-slate-700`}>{p.precio_mecanico ? fmtBs(p.precio_mecanico) : "—"}</td>
-                            <td className={`${C} text-right text-blue-700 font-semibold`}>{p.precio_real ? fmtBs(p.precio_real) : "—"}</td>
-                            <td className={`${C} text-slate-600`}>{catNombre}</td>
-                            <td className={`${C} text-slate-600`}>{p.industria ?? "—"}</td>
-                            <td className={`${C} text-slate-500`}>{p.modelos ?? "—"}</td>
-                            <td className={`${C} text-slate-500`}>{p.medidas ?? "—"}</td>
-                            <td className={`${C} text-slate-600`}>{provNombre}</td>
-                            <td className={`${C} text-slate-500`}>{p.aplicacion ?? "—"}</td>
-                            <td className={`${C} text-slate-500`}>{p.descripcion ?? "—"}</td>
+                            <td className={`${C} text-slate-600`}>
+                              {draft
+                                ? <CampoInline value={draft.marca} onChange={(v) => setDraft("marca", v)} />
+                                : (p.marca ?? "—")}
+                            </td>
+                            <td className={`${C} text-slate-600`}>
+                              {draft
+                                ? <CampoInline value={draft.procedencia} onChange={(v) => setDraft("procedencia", v)} />
+                                : (p.procedencia ?? "—")}
+                            </td>
+                            <td className={`${C} text-right text-slate-700`}>
+                              {draft
+                                ? <CampoInline type="number" className="text-right" value={draft.precio_compra} onChange={(v) => setDraft("precio_compra", v)} />
+                                : fmtBs(p.precio_compra)}
+                            </td>
+                            <td className={`${C} text-right text-slate-500`}>
+                              {draft
+                                ? <CampoInline type="number" className="text-right" value={draft.costo_caja} onChange={(v) => setDraft("costo_caja", v)} />
+                                : (p.costo_caja ? fmtBs(p.costo_caja) : "—")}
+                            </td>
+                            <td className={`${C} text-right font-semibold text-emerald-700`}>
+                              {draft
+                                ? <CampoInline type="number" className="text-right" value={draft.precio_venta} onChange={(v) => setDraft("precio_venta", v)} />
+                                : fmtBs(p.precio_venta)}
+                            </td>
+                            <td className={`${C} text-right text-slate-700`}>
+                              {draft
+                                ? <CampoInline type="number" className="text-right" value={draft.precio_mayor} onChange={(v) => setDraft("precio_mayor", v)} />
+                                : (p.precio_mayor ? fmtBs(p.precio_mayor) : "—")}
+                            </td>
+                            <td className={`${C} text-right text-slate-700`}>
+                              {draft
+                                ? <CampoInline type="number" className="text-right" value={draft.precio_mecanico} onChange={(v) => setDraft("precio_mecanico", v)} />
+                                : (p.precio_mecanico ? fmtBs(p.precio_mecanico) : "—")}
+                            </td>
+                            <td className={`${C} text-right text-blue-700 font-semibold`}>
+                              {draft
+                                ? <CampoInline type="number" className="text-right" value={draft.precio_real} onChange={(v) => setDraft("precio_real", v)} />
+                                : (p.precio_real ? fmtBs(p.precio_real) : "—")}
+                            </td>
+                            <td className={`${C} text-slate-600`}>
+                              {draft
+                                ? <SelectInline value={draft.categoria_id} onChange={(v) => setDraft("categoria_id", v)}
+                                    options={categorias.map((c) => ({ value: c.id, label: c.nombre }))} />
+                                : catNombre}
+                            </td>
+                            <td className={`${C} text-slate-600`}>
+                              {draft
+                                ? <CampoInline value={draft.industria} onChange={(v) => setDraft("industria", v)} />
+                                : (p.industria ?? "—")}
+                            </td>
+                            <td className={`${C} text-slate-500`}>
+                              {draft
+                                ? <CampoInline value={draft.modelos} onChange={(v) => setDraft("modelos", v)} />
+                                : (p.modelos ?? "—")}
+                            </td>
+                            <td className={`${C} text-slate-500`}>
+                              {draft
+                                ? <CampoInline value={draft.medidas} onChange={(v) => setDraft("medidas", v)} />
+                                : (p.medidas ?? "—")}
+                            </td>
+                            <td className={`${C} text-slate-600`}>
+                              {draft
+                                ? <SelectInline value={draft.proveedor_id} onChange={(v) => setDraft("proveedor_id", v)}
+                                    options={proveedores.map((pv) => ({ value: pv.id, label: pv.razon_social }))} />
+                                : provNombre}
+                            </td>
+                            <td className={`${C} text-slate-500`}>
+                              {draft
+                                ? <CampoInline value={draft.aplicacion} onChange={(v) => setDraft("aplicacion", v)} />
+                                : (p.aplicacion ?? "—")}
+                            </td>
+                            <td className={`${C} text-slate-500`}>
+                              {draft
+                                ? <CampoInline value={draft.descripcion} onChange={(v) => setDraft("descripcion", v)} />
+                                : (p.descripcion ?? "—")}
+                            </td>
                           </tr>
                         );
                       })}
