@@ -6,7 +6,7 @@ import { forwardRef, useMemo } from "react";
 import DevolucionesTab from "@/modules/ventas/pages/DevolucionesTab";
 import { useEffect, useRef, useState } from "react";
 import { swr, bust, peek } from "@/shared/utils/cache";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
@@ -291,9 +291,15 @@ function ClienteSearch({
 // ─────────────────────────────────────────────────────────────────────────────
 // Página principal
 // ─────────────────────────────────────────────────────────────────────────────
+const TABS_VALIDAS: Tab[] = ["ventas", "cotizaciones", "devoluciones"];
+
 export default function VentasPage() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>("ventas");
+  const [params] = useSearchParams();
+  const tabInicial = params.get("tab") as Tab | null;
+  const [tab, setTab] = useState<Tab>(
+    tabInicial && TABS_VALIDAS.includes(tabInicial) ? tabInicial : "ventas"
+  );
   const [ventas, setVentas]             = useState<Venta[]>([]);
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
   const [productos, setProductos]       = useState<Producto[]>([]);

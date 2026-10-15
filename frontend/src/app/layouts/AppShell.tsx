@@ -23,6 +23,7 @@ import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/cn";
 import { NetworkBlockedPage } from "@/shared/components/NetworkBlockedPage";
 import { useAuthStore } from "@/shared/stores/auth.store";
+import { useVentaDraftStore } from "@/shared/stores/ventaDraft.store";
 import { useTheme } from "@/shared/hooks/useTheme";
 import { puedeAcceder, ROL_LABEL } from "@/shared/config/roles";
 import { BRAND } from "@/shared/config/branding";
@@ -52,6 +53,7 @@ export function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const { email, roles, logout, networkBlocked, setNetworkBlocked, lastActivity, updateActivity } = useAuthStore();
+  const ventaEnCurso = useVentaDraftStore((s) => s.cart.length > 0);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [networkChecked, setNetworkChecked] = useState(false);
   const [pwModal, setPwModal] = useState(false);
@@ -123,9 +125,12 @@ export function AppShell() {
 
   if (networkBlocked) return <NetworkBlockedPage />;
 
-  const navItems = NAV_ITEMS.filter((item) =>
-    !item.permiso || puedeAcceder(roles, item.permiso as Parameters<typeof puedeAcceder>[1])
-  );
+  // Si hay una venta/cotización en curso (carrito con algo), "Ventas" en el
+  // menú manda directo al armador (/ventas/nueva) para retomarla en vez de
+  // a la lista — así no hace falta un clic extra en "Nueva venta".
+  const navItems = NAV_ITEMS
+    .filter((item) => !item.permiso || puedeAcceder(roles, item.permiso as Parameters<typeof puedeAcceder>[1]))
+    .map((item) => (item.to === "/ventas" && ventaEnCurso ? { ...item, to: "/ventas/nueva" } : item));
 
   const handleLogout = () => {
     logout();

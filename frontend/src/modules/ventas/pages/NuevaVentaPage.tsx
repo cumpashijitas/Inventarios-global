@@ -20,18 +20,9 @@ import { toast } from "sonner";
 import {
   AccionesDocumento, DocCotizacion, ReciboVenta, textoWhatsappCotizacion, textoWhatsappVenta,
 } from "@/shared/components/recibos/DocumentosVenta";
+import { useVentaDraftStore, type CartItem } from "@/shared/stores/ventaDraft.store";
 
 type Modo = "venta" | "cotizacion";
-
-interface CartItem {
-  id: string; sku: string; nombre: string;
-  precio: number;
-  precio_venta: number;
-  precio_mayor?: number | null;
-  precio_mecanico?: number | null;
-  precio_real?: number | null;
-  cantidad: number; stock: number;
-}
 
 // ─── ClienteSearch (autocomplete + texto libre) ───────────────────────────────
 function ClienteSearch({
@@ -120,13 +111,31 @@ export default function NuevaVentaPage() {
   const modo: Modo = (params.get("modo") as Modo) ?? "venta";
   const setModo = (m: Modo) => setParams({ modo: m });
   const cotizacionIdParam = params.get("cotizacion_id");
-  const [cotizacionOrigen, setCotizacionOrigen] = useState<Cotizacion | null>(null);
 
   const todayStr = () => new Date().toISOString().slice(0, 10);
   const addDays  = (d: string, n: number) => {
     const dt = new Date(d); dt.setDate(dt.getDate() + n);
     return dt.toISOString().slice(0, 10);
   };
+
+  // Borrador de venta/cotización en curso — persiste en sessionStorage, así
+  // que sobrevive navegar a otra sección y volver. Se limpia (resetDraft) solo
+  // cuando la venta/cotización se confirma con éxito.
+  const {
+    cart, setCart,
+    clienteNombre, setClienteNombre,
+    clienteId, setClienteId,
+    clienteTipo, setClienteTipo,
+    clienteDescuento, setClienteDescuento,
+    metodoPago, setMetodoPago,
+    montoPagado, setMontoPagado,
+    notas, setNotas,
+    fechaVenta, setFechaVenta,
+    fechaCot, setFechaCot,
+    fechaVence, setFechaVence,
+    cotizacionOrigen, setCotizacionOrigen,
+    resetDraft,
+  } = useVentaDraftStore();
 
   const [empresa,   setEmpresa]   = useState<EmpresaPerfil | null>(null);
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -140,22 +149,6 @@ export default function NuevaVentaPage() {
   const reciboVentaRef = useRef<HTMLDivElement>(null);
   const reciboCotRef   = useRef<HTMLDivElement>(null);
 
-  // Cliente
-  const [clienteNombre,    setClienteNombre]    = useState("");
-  const [clienteId,        setClienteId]        = useState<string | null>(null);
-  const [clienteTipo,      setClienteTipo]      = useState<string | null>(null);
-  const [clienteDescuento, setClienteDescuento] = useState(0); // % editable
-
-  // Carrito
-  const [cart, setCart] = useState<CartItem[]>([]);
-
-  // Pago / cotización
-  const [metodoPago,  setMetodoPago]  = useState<VentaIn["metodo_pago"]>("efectivo");
-  const [montoPagado, setMontoPagado] = useState("");
-  const [notas,       setNotas]       = useState("");
-  const [fechaVenta,  setFechaVenta]  = useState(todayStr());
-  const [fechaCot,    setFechaCot]    = useState(todayStr());
-  const [fechaVence,  setFechaVence]  = useState(() => addDays(todayStr(), 7));
   const [saving,      setSaving]      = useState(false);
   const [selectedIdx,   setSelectedIdx]   = useState(-1);
   const [tableVisible,  setTableVisible]  = useState(true);
@@ -194,8 +187,11 @@ export default function NuevaVentaPage() {
 
   // Convertir cotización → venta: precarga cliente + carrito desde la cotización.
   // Espera a que termine la carga inicial (clientes) para calcular el descuento bien.
+  // Si ya se cargó esta misma cotización en el borrador (por ej. el usuario volvió
+  // con el botón "atrás" del navegador a esta misma URL), no la vuelve a pisar —
+  // el borrador persistido puede tener ediciones hechas después de la carga inicial.
   useEffect(() => {
-    if (loading || !cotizacionIdParam) return;
+    if (loading || !cotizacionIdParam || cotizacionOrigen?.id === cotizacionIdParam) return;
     (async () => {
       try {
         const cot = await ventasApi.getCotizacion(cotizacionIdParam);
@@ -335,6 +331,7 @@ export default function NuevaVentaPage() {
         }
         bust("ventas:"); bust("inv:productos"); // stock cambió
         setReciboVenta(result);
+        resetDraft(); // venta confirmada: el borrador no debe seguir ahí para la próxima
       } else {
         const result = await ventasApi.createCotizacion({
           cliente_id: clienteId || undefined,
@@ -348,6 +345,7 @@ export default function NuevaVentaPage() {
         });
         bust("ventas:");
         setReciboCot(result);
+        resetDraft(); // cotización confirmada: el borrador no debe seguir ahí para la próxima
       }
     } catch (e) {
       const { code } = extractApiError(e);
@@ -381,6 +379,19 @@ export default function NuevaVentaPage() {
           className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 shrink-0">
           <ArrowLeft className="h-4 w-4" /> Volver
         </button>
+        {(cart.length > 0 || clienteNombre.trim() !== "") && (
+          <button type="button"
+            onClick={() => {
+              const etiqueta = modo === "venta" ? "venta" : "cotización";
+              if (window.confirm(`¿Cancelar esta ${etiqueta}? Se perderá el carrito y los datos cargados.`)) {
+                resetDraft();
+                navigate(modo === "venta" ? "/ventas" : "/ventas?tab=cotizaciones");
+              }
+            }}
+            className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700 shrink-0">
+            <X className="h-4 w-4" /> Cancelar {modo === "venta" ? "venta" : "cotización"}
+          </button>
+        )}
         <div className="hidden sm:block h-5 w-px bg-slate-200 shrink-0" />
 
         {/* PRIMERO: buscador de productos */}
