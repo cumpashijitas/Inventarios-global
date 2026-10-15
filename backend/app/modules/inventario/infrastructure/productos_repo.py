@@ -46,18 +46,33 @@ class ProductosRepository:
             )
 
         if search and search.strip():
-            # Columnas donde se busca cada palabra. Cada palabra debe coincidir
-            # con el INICIO de la columna o el INICIO de alguna palabra dentro
-            # de ella (no en cualquier posición) — así "PISTON 4A" encuentra
-            # "PISTON TOYOTA MOTOR 4AGE" sin traer coincidencias a mitad de
-            # palabra como "CAMISA" al buscar "MISA".
+            # Columnas donde se busca cada palabra. Cada palabra se evalúa con
+            # una de dos reglas, según si tiene o no símbolos:
             #
-            # "Inicio de palabra" = justo después del comienzo del texto o de
-            # cualquier carácter que NO sea letra/número — no solo un espacio.
-            # Las descripciones reales usan "/", "(", ")", "-" como separadores
-            # (ej. "3A/4A/5A/7A"), así que un LIKE '% token%' (que solo detecta
-            # espacio) se perdía coincidencias reales ahí. Con regex, "4a" sí
-            # encuentra el "4A" en "3A/4A/5A" además del de "... 4A/5A".
+            # 1) Palabra solo letras/números (ej. "rod", "22", "misa") → debe
+            #    coincidir con el INICIO de la columna o el INICIO de alguna
+            #    palabra dentro de ella (no en cualquier posición) — así
+            #    "PISTON 4A" encuentra "PISTON TOYOTA MOTOR 4AGE" sin traer
+            #    coincidencias a mitad de palabra como "CAMISA" al buscar
+            #    "MISA". "Inicio de palabra" = justo después del comienzo del
+            #    texto o de cualquier carácter que NO sea letra/número — no
+            #    solo un espacio, porque las descripciones reales usan "/",
+            #    "(", ")", "-" como separadores (ej. "3A/4A/5A/7A").
+            #
+            # 2) Palabra con algún símbolo (ej. "*22", "7*22*7", un código con
+            #    "/" o "-") → substring literal, en cualquier posición, sin
+            #    condición de borde. La regla de "inicio de palabra" de arriba
+            #    es imposible de cumplir acá: exige un separador justo ANTES
+            #    del texto buscado, pero si lo buscado ya empieza con un
+            #    símbolo (que es a la vez separador y parte del dato real,
+            #    como en medidas "7*22*7"), nunca hay dos separadores
+            #    seguidos en el texto real para que matchee. Con substring
+            #    puro, "*22" sí encuentra "7*22*7" porque el texto
+            #    literalmente lo contiene.
+            #
+            # Una búsqueda puede mezclar ambos tipos de palabra sin problema
+            # (ej. "rod *22"): cada una se evalúa con su propia regla, y el
+            # resultado final exige que TODAS las palabras matcheen (AND).
             columnas_busqueda = [
                 "p.nombre", "p.sku", "coalesce(p.codigo_universal,'')",
                 "coalesce(p.marca,'')", "coalesce(p.procedencia,'')",
@@ -66,9 +81,14 @@ class ProductosRepository:
                 "coalesce(p.aplicacion,'')", "coalesce(p.descripcion,'')",
             ]
             for token in search.strip().lower().split():
-                params.append(f"(^|[^a-z0-9]){re.escape(token)}")
-                n = len(params)
-                condiciones = [f"lower({col}) ~ ${n}" for col in columnas_busqueda]
+                if re.fullmatch(r"[a-z0-9]+", token):
+                    params.append(f"(^|[^a-z0-9]){re.escape(token)}")
+                    n = len(params)
+                    condiciones = [f"lower({col}) ~ ${n}" for col in columnas_busqueda]
+                else:
+                    params.append(token)
+                    n = len(params)
+                    condiciones = [f"position(${n} in lower({col})) > 0" for col in columnas_busqueda]
                 where_clauses.append("(" + " or ".join(condiciones) + ")")
 
         where = " and ".join(where_clauses)
