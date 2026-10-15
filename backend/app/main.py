@@ -109,16 +109,25 @@ app = FastAPI(
 #   (Vite a veces serve en 5173, a veces en 5174 si 5173 está ocupado, etc.).
 #   Usamos allow_origin_regex porque allow_origins=["*"] no es compatible con
 #   allow_credentials=True (regla CORS).
-# - En producción: lista explícita desde CORS_ORIGINS env var.
+# - En producción: lista explícita desde CORS_ORIGINS env var (el dominio real)
+#   MÁS una regex para cualquier preview deployment de Vercel de este proyecto
+#   (inventarios-global-<lo-que-sea>-cumpas-projects.vercel.app). Vercel genera
+#   una URL nueva por cada deploy y otra fija por rama — sin esta regex, cada
+#   vez que se prueba una rama distinta (o un nuevo deploy de la misma) hay que
+#   ir a mano a agregar el dominio en CORS_ORIGINS en Render. Con la regex no
+#   hace falta tocar nada nunca más para esto.
 #
 # IMPORTANTE: el preflight OPTIONS lo responde este middleware DIRECTO; no
 # llega al endpoint. Si ves 400 en OPTIONS, es porque el origin/método/header
 # pedido NO está en la lista permitida. La regex de abajo cubre dev al 100%.
 # -----------------------------------------------------------------------------
+VERCEL_PREVIEW_ORIGIN_REGEX = r"^https://inventarios-global-[a-z0-9-]+-cumpas-projects\.vercel\.app$"
+
 if settings.is_production:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
+        allow_origin_regex=VERCEL_PREVIEW_ORIGIN_REGEX,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
