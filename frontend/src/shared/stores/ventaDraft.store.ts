@@ -84,6 +84,28 @@ interface VentaDraftState extends DraftValues {
   resetDraft: () => void;
 }
 
+/**
+ * Única fuente de verdad de "¿hay una venta/cotización en curso?" — se usa
+ * tanto para decidir a dónde manda el link "Ventas" del menú como para
+ * mostrar el botón "Cancelar". Depende de la MÍNIMA acción hecha (cualquier
+ * campo tocado), no de que haya productos en el carrito — un cliente puede
+ * haber escrito solo el nombre del cliente y nada más, y eso ya cuenta.
+ *
+ * OJO: metodoPago, fechaVenta, fechaCot y fechaVence quedan afuera a propósito
+ * — nunca están "vacíos" (tienen default: "efectivo", hoy, hoy+7), así que
+ * incluirlos haría que esto diera true siempre, incluso sin tocar nada.
+ */
+export function hayVentaEnCurso(s: DraftValues): boolean {
+  return (
+    s.cart.length > 0 ||
+    s.clienteNombre.trim() !== "" ||
+    s.clienteId !== null ||
+    s.notas.trim() !== "" ||
+    s.montoPagado.trim() !== "" ||
+    s.cotizacionOrigen !== null
+  );
+}
+
 export const useVentaDraftStore = create<VentaDraftState>()(
   persist(
     (set) => ({

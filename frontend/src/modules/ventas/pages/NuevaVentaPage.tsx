@@ -20,7 +20,7 @@ import { toast } from "sonner";
 import {
   AccionesDocumento, DocCotizacion, ReciboVenta, textoWhatsappCotizacion, textoWhatsappVenta,
 } from "@/shared/components/recibos/DocumentosVenta";
-import { useVentaDraftStore, type CartItem } from "@/shared/stores/ventaDraft.store";
+import { hayVentaEnCurso, useVentaDraftStore, type CartItem } from "@/shared/stores/ventaDraft.store";
 
 type Modo = "venta" | "cotizacion";
 
@@ -136,6 +136,7 @@ export default function NuevaVentaPage() {
     cotizacionOrigen, setCotizacionOrigen,
     resetDraft,
   } = useVentaDraftStore();
+  const hayBorrador = useVentaDraftStore(hayVentaEnCurso);
 
   const [empresa,   setEmpresa]   = useState<EmpresaPerfil | null>(null);
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -379,7 +380,7 @@ export default function NuevaVentaPage() {
           className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 shrink-0">
           <ArrowLeft className="h-4 w-4" /> Volver
         </button>
-        {(cart.length > 0 || clienteNombre.trim() !== "") && (
+        {hayBorrador && (
           <button type="button"
             onClick={() => {
               const etiqueta = modo === "venta" ? "venta" : "cotización";

@@ -23,7 +23,7 @@ import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/cn";
 import { NetworkBlockedPage } from "@/shared/components/NetworkBlockedPage";
 import { useAuthStore } from "@/shared/stores/auth.store";
-import { useVentaDraftStore } from "@/shared/stores/ventaDraft.store";
+import { hayVentaEnCurso, useVentaDraftStore } from "@/shared/stores/ventaDraft.store";
 import { useTheme } from "@/shared/hooks/useTheme";
 import { puedeAcceder, ROL_LABEL } from "@/shared/config/roles";
 import { BRAND } from "@/shared/config/branding";
@@ -53,7 +53,7 @@ export function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const { email, roles, logout, networkBlocked, setNetworkBlocked, lastActivity, updateActivity } = useAuthStore();
-  const ventaEnCurso = useVentaDraftStore((s) => s.cart.length > 0);
+  const ventaEnCurso = useVentaDraftStore(hayVentaEnCurso);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [networkChecked, setNetworkChecked] = useState(false);
   const [pwModal, setPwModal] = useState(false);
