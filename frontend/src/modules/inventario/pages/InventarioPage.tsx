@@ -16,6 +16,7 @@ import {
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { inventarioApi } from "@/modules/inventario/services/inventarioApi";
+import { useInventarioBusquedaStore } from "@/shared/stores/inventarioBusqueda.store";
 import type {
   Almacen, Categoria, CategoriaIn, Cliente, ClienteIn, Producto, ProductoIn,
   Proveedor, ProveedorIn, UnidadMedida,
@@ -107,7 +108,9 @@ function SelectInline({ value, onChange, options, className = "" }: {
 // ─────────────────────────────────────────────────────────────────────────────
 export default function InventarioPage() {
   const [tab, setTab]         = useState<Tab>("productos");
-  const [busqueda, setBusqueda] = useState("");
+  // Texto de búsqueda — en store persistido (sessionStorage), no useState
+  // local, para que sobreviva navegar a otra sección y volver.
+  const { busqueda, setBusqueda } = useInventarioBusquedaStore();
   const [soloBajoStock, setSoloBajoStock] = useState(false);
   const [masVendidos, setMasVendidos] = useState(false);
   const [modalPedido, setModalPedido] = useState(false);
