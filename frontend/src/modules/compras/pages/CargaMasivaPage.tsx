@@ -46,6 +46,10 @@ interface FilaProducto {
   matchNombre?: string | null;
   confianza?: number;
   invData?: InvData | null;
+  // true solo para filas agregadas a mano ("+ Agregar fila") — distingue de
+  // las que vinieron de un documento importado, que ya tienen su matchStatus
+  // real y no deben volver a verificarse automáticamente.
+  origenManual?: boolean;
 }
 
 const FILA_VACIA = (): FilaProducto => ({
@@ -57,6 +61,7 @@ const FILA_VACIA = (): FilaProducto => ({
   modelos: "", medidas: "", proveedor: "",
   cantidad: "0", stockMin: "5",
   matchStatus: "manual",
+  origenManual: true,
 });
 
 // ─── Estilos por estado de matching ──────────────────────────────────────────
@@ -186,6 +191,7 @@ export default function CargaMasivaPage() {
           matchNombre: item.match_nombre,
           confianza:   item.confianza,
           invData:     item.inv_data ?? null,
+          origenManual: false,
         };
       });
       setFilas(nuevasFilas);
@@ -214,6 +220,73 @@ export default function CargaMasivaPage() {
   };
   const agregarFila = () => setFilas((prev) => [...prev, FILA_VACIA()]);
   const eliminarFila = (id: string) => setFilas((prev) => prev.filter((f) => f.id !== id));
+
+  // ── Verificación automática de filas manuales contra el inventario ───────
+  // Solo para filas agregadas a mano (origenManual) — las que vinieron de un
+  // documento importado ya pasaron por match_items en parse-archivo y no se
+  // tocan acá.
+  //
+  // Cada fila tiene su PROPIO temporizador independiente (no uno compartido
+  // entre todas): escribir en la fila 2 no reinicia ni pisa la espera de la
+  // fila 1. Ventana muy corta (150ms) — alcanza para no mandar una request
+  // por cada letra individual, pero se siente instantáneo al tipear.
+  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const ultimaClavePorFila = useRef<Map<string, string>>(new Map());
+
+  const verificarFila = async (f: FilaProducto) => {
+    try {
+      const [r] = await lotesApi.verificarItems([
+        { id: f.id, sku: f.sku.trim(), nombre: f.nombre.trim() },
+      ]);
+      if (!r) return;
+      setFilas((prev) => prev.map((row) => {
+        if (row.id !== f.id || !row.origenManual) return row;
+        return {
+          ...row,
+          matchStatus: r.match_status,
+          matchId: r.match_id,
+          matchSku: r.match_sku,
+          matchNombre: r.match_nombre,
+          confianza: r.confianza,
+          invData: r.inv_data ?? null,
+        };
+      }));
+    } catch (e) {
+      console.error("Error verificando fila manual contra inventario:", e);
+    }
+  };
+
+  useEffect(() => {
+    const manuales = filas.filter((f) => f.origenManual && (f.sku.trim() || f.nombre.trim()));
+    const idsVivos = new Set(manuales.map((f) => f.id));
+
+    // Limpiar timers de filas que ya no existen o que se vaciaron
+    for (const id of [...timersRef.current.keys()]) {
+      if (!idsVivos.has(id)) {
+        clearTimeout(timersRef.current.get(id));
+        timersRef.current.delete(id);
+        ultimaClavePorFila.current.delete(id);
+      }
+    }
+
+    for (const f of manuales) {
+      const clave = `${f.sku.trim()}|${f.nombre.trim()}`;
+      if (clave === ultimaClavePorFila.current.get(f.id)) continue; // esta fila no cambió
+
+      clearTimeout(timersRef.current.get(f.id));
+      const t = setTimeout(() => {
+        ultimaClavePorFila.current.set(f.id, clave);
+        verificarFila(f);
+      }, 150);
+      timersRef.current.set(f.id, t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filas]);
+
+  // Limpiar todos los temporizadores pendientes al desmontar la página
+  useEffect(() => () => {
+    for (const t of timersRef.current.values()) clearTimeout(t);
+  }, []);
 
   // ── Guardar: salva ítems + actualiza inventario en un paso ───────────────
   const handleGuardarLote = async () => {
@@ -763,6 +836,7 @@ function itemToFila(item: Lote["items"][number]): FilaProducto {
     anioDesde: item.anio_desde ? String(item.anio_desde) : "",
     anioHasta: item.anio_hasta ? String(item.anio_hasta) : "",
     descripcion: item.descripcion ?? "",
+    origenManual: false,
   };
 }
 

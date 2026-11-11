@@ -50,10 +50,19 @@ async def match_items(
     conn: asyncpg.Connection,
     empresa_id: UUID,
     items: list[dict[str, str]],
+    requerir_completo: bool = True,
 ) -> list[dict[str, Any]]:
     """
     Para cada item del documento, busca si ya existe en el inventario.
     Devuelve la lista enriquecida con campos de matching.
+
+    requerir_completo: si True (default, usado por parse-archivo), una fila
+    sin sku o sin nombre se marca "incompleto" sin importar si matcheó algo —
+    tiene sentido ahí porque indica que el parseo del documento trajo una
+    fila rota. Si False (usado por /lotes/match, para filas cargadas a
+    mano), NO se fuerza "incompleto" solo porque falte un campo: el usuario
+    puede estar escribiendo el sku primero y el nombre después, y mientras
+    tanto igual queremos mostrarle si ese sku ya existe en el inventario.
     """
     # Cargar todos los productos de la empresa una sola vez (evita N queries)
     productos = await conn.fetch(
@@ -141,8 +150,8 @@ async def match_items(
                 if match_status != "nuevo":
                     break
 
-        # ── Marcar incompleto si falta SKU o nombre ──────────────────────────
-        if not sku_doc.strip() or not nombre_doc.strip():
+        # ── Marcar incompleto si falta SKU o nombre (solo cuando se pide) ────
+        if requerir_completo and (not sku_doc.strip() or not nombre_doc.strip()):
             match_status = "incompleto"
             confianza    = 0
 
@@ -156,3 +165,122 @@ async def match_items(
         resultado.append(enriquecido)
 
     return resultado
+
+
+_COLUMNAS_PRODUCTO = """
+    id, sku, nombre, marca, precio_compra, precio_venta, precio_mecanico,
+    precio_mayor, stock_minimo, aplicacion, medidas, modelos, anio_desde,
+    anio_hasta, descripcion
+"""
+# Misma normalización que _normalize(), pero expresada en SQL para filtrar
+# en la base en vez de traer la tabla entera.
+_SKU_NORMALIZADO_SQL = "upper(replace(replace(replace(sku, ' ', ''), '-', ''), '.', ''))"
+
+
+async def match_item_single(
+    conn: asyncpg.Connection,
+    empresa_id: UUID,
+    sku_doc: str,
+    nombre_doc: str,
+) -> dict[str, Any]:
+    """
+    Igual que match_items, pero para UN solo ítem, con consultas puntuales a
+    la base en vez de cargar el catálogo completo en memoria.
+
+    match_items trae los productos de la empresa UNA vez y los compara contra
+    N ítems en memoria — perfecto para un documento con cientos de líneas en
+    una sola pasada. Pero para verificar una fila escrita a mano (una
+    verificación por fila, mientras el usuario escribe) eso significa traer
+    TODO el inventario de la empresa por cada tecla — con catálogos grandes
+    (10k+ productos) se siente lento aunque la lógica sea la misma. Acá cada
+    nivel pide solo el/los 1 candidato(s) puntuales que necesita.
+    """
+    match_status = "nuevo"
+    match_id     = None
+    match_sku    = None
+    match_nombre_inv = None
+    confianza    = 0
+    prod_match: dict | None = None
+
+    sku_norm = _normalize(sku_doc)
+
+    if sku_norm:
+        # ── Nivel 1: SKU exacto (normalizado) ────────────────────────────────
+        row = await conn.fetchrow(
+            f"""
+            select {_COLUMNAS_PRODUCTO}
+              from public.productos
+             where empresa_id = $1 and deleted_at is null and activo = true
+               and {_SKU_NORMALIZADO_SQL} = $2
+             limit 1
+            """,
+            empresa_id, sku_norm,
+        )
+        if row:
+            prod_match   = dict(row)
+            match_status = "existente"
+            match_id     = str(prod_match["id"])
+            match_sku    = prod_match["sku"]
+            match_nombre_inv = prod_match["nombre"]
+            confianza    = 100
+
+            if nombre_doc and prod_match["nombre"]:
+                palabras_doc = set(_palabras_clave(nombre_doc))
+                palabras_inv = set(_palabras_clave(str(prod_match["nombre"])))
+                if palabras_doc and palabras_inv and not (palabras_doc & palabras_inv):
+                    match_status = "conflicto"
+                    confianza    = 50
+
+        # ── Nivel 2: SKU parcial (primeros 6 chars) ──────────────────────────
+        elif len(sku_norm) >= 5:
+            prefijo = sku_norm[:6]
+            row = await conn.fetchrow(
+                f"""
+                select {_COLUMNAS_PRODUCTO}
+                  from public.productos
+                 where empresa_id = $1 and deleted_at is null and activo = true
+                   and {_SKU_NORMALIZADO_SQL} like $2
+                 limit 1
+                """,
+                empresa_id, prefijo + "%",
+            )
+            if row:
+                prod_match   = dict(row)
+                match_status = "probable"
+                match_id     = str(prod_match["id"])
+                match_sku    = prod_match["sku"]
+                match_nombre_inv = prod_match["nombre"]
+                confianza    = 75
+
+    # ── Nivel 3: Nombre fuzzy (primera palabra clave que matchee algo) ───────
+    if match_status == "nuevo" and nombre_doc:
+        for palabra in _palabras_clave(nombre_doc):
+            row = await conn.fetchrow(
+                f"""
+                select {_COLUMNAS_PRODUCTO}
+                  from public.productos
+                 where empresa_id = $1 and deleted_at is null and activo = true
+                   and upper(nombre) like $2
+                 limit 1
+                """,
+                empresa_id, f"%{palabra}%",
+            )
+            if row:
+                prod_match       = dict(row)
+                match_status     = "probable"
+                match_id         = str(prod_match["id"])
+                match_sku        = prod_match["sku"]
+                match_nombre_inv = prod_match["nombre"]
+                confianza        = 55
+                break
+
+    return {
+        "sku": sku_doc,
+        "nombre": nombre_doc,
+        "match_status": match_status,
+        "match_id": match_id,
+        "match_sku": match_sku,
+        "match_nombre": match_nombre_inv,
+        "confianza": confianza,
+        "inv_data": _inv_data(prod_match) if prod_match else None,
+    }

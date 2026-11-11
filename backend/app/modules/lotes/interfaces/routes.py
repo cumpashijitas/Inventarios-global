@@ -14,6 +14,7 @@ from app.modules.lotes.interfaces.schemas import (
     LoteItemIn,
     LoteItemOut,
     LoteOut,
+    MatchItemsIn,
     PageOut,
 )
 
@@ -163,3 +164,28 @@ async def parse_archivo(
         "items": items_matcheados,
         "advertencias": advertencias,
     }
+
+
+@router.post("/match")
+async def verificar_items(
+    body: MatchItemsIn,
+    ctx: TenantContext = Depends(get_tenant_context),
+) -> dict:
+    """
+    Compara ítems sueltos (sku + nombre) contra el inventario — para filas de
+    un lote cargadas a mano, sin archivo de por medio. No toca el flujo de
+    parse-archivo (match_items, carga completa del catálogo en memoria).
+
+    Usa match_item_single (consultas puntuales por ítem) en vez de
+    match_items (carga el catálogo completo) porque acá se verifica de a una
+    fila por vez mientras el usuario escribe — con catálogos grandes, traer
+    todo el inventario en cada tecla se sentía lento.
+    """
+    from app.modules.lotes.infrastructure.matcher import match_item_single
+
+    async with acquire_tenant_conn(ctx.empresa_id, ctx.user_id) as conn:
+        items_matcheados = [
+            {**await match_item_single(conn, UUID(ctx.empresa_id), i.sku, i.nombre), "id": i.id}
+            for i in body.items
+        ]
+    return {"items": items_matcheados}

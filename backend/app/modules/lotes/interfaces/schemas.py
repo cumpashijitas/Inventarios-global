@@ -84,6 +84,20 @@ class ItemsIn(BaseModel):
     items: list[LoteItemIn]
 
 
+class MatchItemIn(BaseModel):
+    """Un ítem suelto (sku + nombre) para verificar contra el inventario —
+    sin archivo de por medio, usado por filas cargadas a mano. `id` es un
+    identificador propio del frontend (ej. el id de la fila) que viaja
+    intacto en la respuesta, para poder reasociar el resultado a la fila."""
+    id: str | None = None
+    sku: str = ""
+    nombre: str = ""
+
+
+class MatchItemsIn(BaseModel):
+    items: list[MatchItemIn]
+
+
 class LoteIn(BaseModel):
     referencia: str = Field(min_length=1, max_length=60)
     proveedor_id: UUID | None = None

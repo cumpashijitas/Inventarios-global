@@ -50,6 +50,17 @@ export const lotesApi = {
     });
     return r.data;
   },
+
+  /**
+   * Compara ítems sueltos (sku + nombre) contra el inventario — mismo
+   * matcher que parseArchivo, pero para filas cargadas a mano (sin archivo).
+   * `id` es cualquier identificador propio del frontend (ej. el id de la
+   * fila); viaja intacto en la respuesta para poder reasociar el resultado.
+   */
+  verificarItems: async (items: { id: string; sku: string; nombre: string }[]): Promise<ParsedItem[]> => {
+    const r = await api.post<{ items: ParsedItem[] }>("/lotes/match", { items });
+    return r.data.items;
+  },
 };
 
 export type MatchStatus = "existente" | "probable" | "nuevo" | "incompleto" | "conflicto";
@@ -70,6 +81,7 @@ export interface InvData {
 }
 
 export interface ParsedItem {
+  id?: string;
   sku?: string;
   nombre?: string;
   cantidad?: string;
